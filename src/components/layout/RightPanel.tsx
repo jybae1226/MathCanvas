@@ -794,4 +794,4 @@ export function RightPanel() {
       )}
     </aside>
   );
-}
+} 

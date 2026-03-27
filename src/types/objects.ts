@@ -125,4 +125,4 @@ export type ProjectState = {
   scene: ProjectScene;
   objects: SceneObject[];
   selectedObjectId: string | null;
-};
+}; 

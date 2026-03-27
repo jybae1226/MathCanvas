@@ -69,4 +69,4 @@ export const hexToRgba = (hex: string, alpha = 1): RGBA => {
 export const rgbaToHex = (rgba: RGBA): string => {
   const toHex = (v: number) => v.toString(16).padStart(2, "0");
   return `#${toHex(rgba.r)}${toHex(rgba.g)}${toHex(rgba.b)}`;
-};
+}; 

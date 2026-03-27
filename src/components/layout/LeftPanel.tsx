@@ -338,4 +338,4 @@ export function LeftPanel() {
       </section>
     </aside>
   );
-}
+} 

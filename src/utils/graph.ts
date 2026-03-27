@@ -420,4 +420,4 @@ export function approximateCurveIntersections(
   }
 
   return unique;
-}
+} 
