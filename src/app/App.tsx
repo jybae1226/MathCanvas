@@ -1,6 +1,7 @@
 import { Topbar } from "../components/layout/Topbar";
 import { LeftPanel } from "../components/layout/LeftPanel";
 import { RightPanel } from "../components/layout/RightPanel";
+import { Canvas2D } from "../components/canvas/Canvas2D";
 
 export default function App() {
   return (
@@ -30,21 +31,11 @@ export default function App() {
             display: "flex",
             alignItems: "center",
             justifyContent: "center",
+            padding: 20,
+            overflow: "auto",
           }}
         >
-          <div
-            style={{
-              width: 900,
-              height: 600,
-              background: "#fff",
-              border: "1px solid #ddd",
-              display: "flex",
-              alignItems: "center",
-              justifyContent: "center",
-            }}
-          >
-            Canvas Area
-          </div>
+          <Canvas2D />
         </main>
 
         <RightPanel />
