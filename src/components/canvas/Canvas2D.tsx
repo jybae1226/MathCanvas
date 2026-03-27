@@ -147,7 +147,7 @@ export function Canvas2D() {
   const yLabelEvery = Math.max(1, Math.ceil(yTicks.length / 18));
 
   const xLabels = xTicks
-    .filter((value, index) => index % xLabelEvery === 0)
+    .filter((_value, index) => index % xLabelEvery === 0)
     .map((x) => (
       <text
         key={`xl-${x}`}
@@ -162,7 +162,7 @@ export function Canvas2D() {
     ));
 
   const yLabels = yTicks
-    .filter((value, index) => index % yLabelEvery === 0)
+    .filter((_value, index) => index % yLabelEvery === 0)
     .map((y) => (
       <text
         key={`yl-${y}`}
