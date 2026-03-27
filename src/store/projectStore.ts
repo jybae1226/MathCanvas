@@ -14,11 +14,16 @@ type HistorySnapshot = {
   selectedObjectId: ProjectState["selectedObjectId"];
 };
 
+type ToolMode = "select" | "line";
+
 type ProjectActions = {
   addPoint: () => void;
-  addLine: () => void;
+  startLineTool: () => void;
   addFunction: () => void;
   addText: () => void;
+
+  setActiveTool: (tool: ToolMode) => void;
+  handleCanvasWorldClick: (x: number, y: number) => void;
 
   selectObject: (id: string | null) => void;
   updateObject: (id: string, patch: Partial<SceneObject>) => void;
@@ -31,8 +36,15 @@ type ProjectActions = {
   updateTextSize: (id: string, fontSize: number) => void;
 
   updateFunctionExpression: (id: string, expression: string) => void;
+  updateFunctionDomain: (id: string, domain: [number, number] | null) => void;
+
+  updateScene: (patch: Partial<ProjectState["scene"]>) => void;
 
   moveObjectBy: (id: string, dx: number, dy: number) => void;
+  beginInteractionHistory: () => void;
+  endInteractionHistory: () => void;
+
+  deleteSelectedObject: () => void;
 
   exportProjectJson: () => string;
   importProjectJson: (json: string) => void;
@@ -46,6 +58,9 @@ type ProjectStore = ProjectState &
   ProjectActions & {
     historyPast: HistorySnapshot[];
     historyFuture: HistorySnapshot[];
+    activeTool: ToolMode;
+    lineDraftStart: { x: number; y: number } | null;
+    interactionSnapshot: HistorySnapshot | null;
   };
 
 const initialState: ProjectState = {
@@ -55,6 +70,8 @@ const initialState: ProjectState = {
     height: 600,
     xRange: [-10, 10],
     yRange: [-10, 10],
+    xTickStep: 1,
+    yTickStep: 1,
     showGrid: true,
     showAxes: true,
   },
@@ -92,6 +109,9 @@ export const useProjectStore = create<ProjectStore>((set, get) => ({
   ...initialState,
   historyPast: [],
   historyFuture: [],
+  activeTool: "select",
+  lineDraftStart: null,
+  interactionSnapshot: null,
 
   addPoint: () =>
     set((state) =>
@@ -119,37 +139,18 @@ export const useProjectStore = create<ProjectStore>((set, get) => ({
               label: "A",
             },
           ],
+          activeTool: "select",
+          lineDraftStart: null,
         };
       }),
     ),
 
-  addLine: () =>
-    set((state) =>
-      withHistory(state, () => {
-        const id = makeId("line");
-        return {
-          selectedObjectId: id,
-          objects: [
-            ...state.objects,
-            {
-              id,
-              name: "Line",
-              type: "line2d",
-              visible: true,
-              locked: false,
-              x1: -4,
-              y1: -2,
-              x2: 4,
-              y2: 3,
-              stroke: {
-                ...defaultStroke(),
-                color: { r: 200, g: 40, b: 40, a: 1 },
-              },
-            },
-          ],
-        };
-      }),
-    ),
+  startLineTool: () =>
+    set(() => ({
+      activeTool: "line",
+      lineDraftStart: null,
+      selectedObjectId: null,
+    })),
 
   addFunction: () =>
     set((state) =>
@@ -166,14 +167,16 @@ export const useProjectStore = create<ProjectStore>((set, get) => ({
               visible: true,
               locked: false,
               expression: "x^2 / 4",
-              domain: [-8, 8],
-              samples: 300,
+              domain: null,
+              samples: 600,
               stroke: {
                 ...defaultStroke(),
                 color: { r: 40, g: 90, b: 210, a: 1 },
               },
             },
           ],
+          activeTool: "select",
+          lineDraftStart: null,
         };
       }),
     ),
@@ -198,13 +201,65 @@ export const useProjectStore = create<ProjectStore>((set, get) => ({
               textStyle: defaultTextStyle(),
             },
           ],
+          activeTool: "select",
+          lineDraftStart: null,
         };
       }),
     ),
 
+  setActiveTool: (tool) =>
+    set(() => ({
+      activeTool: tool,
+      lineDraftStart: null,
+      selectedObjectId: tool === "select" ? get().selectedObjectId : null,
+    })),
+
+  handleCanvasWorldClick: (x, y) =>
+    set((state) => {
+      if (state.activeTool !== "line") {
+        return {
+          selectedObjectId: null,
+        };
+      }
+
+      if (state.lineDraftStart === null) {
+        return {
+          lineDraftStart: { x, y },
+          selectedObjectId: null,
+        };
+      }
+
+      const id = makeId("line");
+
+      return withHistory(state, () => ({
+        objects: [
+          ...state.objects,
+          {
+            id,
+            name: "Line",
+            type: "line2d",
+            visible: true,
+            locked: false,
+            x1: state.lineDraftStart!.x,
+            y1: state.lineDraftStart!.y,
+            x2: x,
+            y2: y,
+            stroke: {
+              ...defaultStroke(),
+              color: { r: 200, g: 40, b: 40, a: 1 },
+            },
+          },
+        ],
+        selectedObjectId: id,
+        lineDraftStart: null,
+      }));
+    }),
+
   selectObject: (id) =>
     set(() => ({
       selectedObjectId: id,
+      activeTool: "select",
+      lineDraftStart: null,
     })),
 
   updateObject: (id, patch) =>
@@ -307,42 +362,94 @@ export const useProjectStore = create<ProjectStore>((set, get) => ({
       })),
     ),
 
-  moveObjectBy: (id, dx, dy) =>
+  updateFunctionDomain: (id, domain) =>
     set((state) =>
       withHistory(state, () => ({
-        objects: state.objects.map((obj) => {
-          if (obj.id !== id) return obj;
-
-          if (obj.type === "point2d") {
-            return {
-              ...obj,
-              x: obj.x + dx,
-              y: obj.y + dy,
-            };
-          }
-
-          if (obj.type === "line2d") {
-            return {
-              ...obj,
-              x1: obj.x1 + dx,
-              y1: obj.y1 + dy,
-              x2: obj.x2 + dx,
-              y2: obj.y2 + dy,
-            };
-          }
-
-          if (obj.type === "text2d") {
-            return {
-              ...obj,
-              x: obj.x + dx,
-              y: obj.y + dy,
-            };
-          }
-
-          return obj;
-        }),
+        objects: state.objects.map((obj) =>
+          obj.id === id && obj.type === "function2d"
+            ? {
+                ...obj,
+                domain,
+              }
+            : obj,
+        ),
       })),
     ),
+
+  updateScene: (patch) =>
+    set((state) =>
+      withHistory(state, () => ({
+        scene: {
+          ...state.scene,
+          ...patch,
+        },
+      })),
+    ),
+
+  beginInteractionHistory: () =>
+    set((state) => {
+      if (state.interactionSnapshot !== null) return state;
+
+      const current = cloneSnapshot(getPresentSnapshot(state));
+
+      return {
+        interactionSnapshot: current,
+        historyPast: [...state.historyPast, current],
+        historyFuture: [],
+      };
+    }),
+
+  endInteractionHistory: () =>
+    set(() => ({
+      interactionSnapshot: null,
+    })),
+
+  moveObjectBy: (id, dx, dy) =>
+    set((state) => ({
+      objects: state.objects.map((obj) => {
+        if (obj.id !== id) return obj;
+
+        if (obj.type === "point2d") {
+          return {
+            ...obj,
+            x: obj.x + dx,
+            y: obj.y + dy,
+          };
+        }
+
+        if (obj.type === "line2d") {
+          return {
+            ...obj,
+            x1: obj.x1 + dx,
+            y1: obj.y1 + dy,
+            x2: obj.x2 + dx,
+            y2: obj.y2 + dy,
+          };
+        }
+
+        if (obj.type === "text2d") {
+          return {
+            ...obj,
+            x: obj.x + dx,
+            y: obj.y + dy,
+          };
+        }
+
+        return obj;
+      }),
+    })),
+
+  deleteSelectedObject: () =>
+    set((state) => {
+      if (!state.selectedObjectId) return state;
+
+      return withHistory(state, () => ({
+        objects: state.objects.filter(
+          (obj) => obj.id !== state.selectedObjectId,
+        ),
+        selectedObjectId: null,
+      }));
+    }),
 
   exportProjectJson: () => {
     const state = get();
@@ -366,6 +473,9 @@ export const useProjectStore = create<ProjectStore>((set, get) => ({
         scene: parsed.scene,
         objects: parsed.objects,
         selectedObjectId: parsed.selectedObjectId ?? null,
+        activeTool: "select",
+        lineDraftStart: null,
+        interactionSnapshot: null,
       })),
     );
   },
@@ -374,6 +484,9 @@ export const useProjectStore = create<ProjectStore>((set, get) => ({
     set((state) =>
       withHistory(state, () => ({
         ...initialState,
+        activeTool: "select",
+        lineDraftStart: null,
+        interactionSnapshot: null,
       })),
     ),
 
@@ -391,6 +504,9 @@ export const useProjectStore = create<ProjectStore>((set, get) => ({
         selectedObjectId: previous.selectedObjectId,
         historyPast: state.historyPast.slice(0, -1),
         historyFuture: [current, ...state.historyFuture],
+        activeTool: "select" as ToolMode,
+        lineDraftStart: null,
+        interactionSnapshot: null,
       };
     }),
 
@@ -408,6 +524,9 @@ export const useProjectStore = create<ProjectStore>((set, get) => ({
         selectedObjectId: next.selectedObjectId,
         historyPast: [...state.historyPast, current],
         historyFuture: state.historyFuture.slice(1),
+        activeTool: "select" as ToolMode,
+        lineDraftStart: null,
+        interactionSnapshot: null,
       };
     }),
 }));

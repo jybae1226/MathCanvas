@@ -5,6 +5,7 @@ import { rgbaToHex } from "../../types/styles";
 export function RightPanel() {
   const objects = useProjectStore((s) => s.objects);
   const selectedObjectId = useProjectStore((s) => s.selectedObjectId);
+  const scene = useProjectStore((s) => s.scene);
 
   const updateStrokeColor = useProjectStore((s) => s.updateStrokeColor);
   const updateStrokeWidth = useProjectStore((s) => s.updateStrokeWidth);
@@ -16,6 +17,9 @@ export function RightPanel() {
   const updateFunctionExpression = useProjectStore(
     (s) => s.updateFunctionExpression,
   );
+  const updateFunctionDomain = useProjectStore((s) => s.updateFunctionDomain);
+
+  const deleteSelectedObject = useProjectStore((s) => s.deleteSelectedObject);
 
   const selected = useMemo(
     () => objects.find((obj) => obj.id === selectedObjectId) ?? null,
@@ -25,7 +29,7 @@ export function RightPanel() {
   return (
     <aside
       style={{
-        width: 280,
+        width: 320,
         borderLeft: "1px solid #ddd",
         padding: 16,
         background: "#fff",
@@ -99,11 +103,57 @@ export function RightPanel() {
               </div>
 
               <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
-                <label>Domain</label>
-                <code>
-                  [{selected.domain[0]}, {selected.domain[1]}]
-                </code>
+                <label style={{ display: "flex", alignItems: "center", gap: 8 }}>
+                  <input
+                    type="checkbox"
+                    checked={selected.domain === null}
+                    onChange={(e) => {
+                      if (e.target.checked) {
+                        updateFunctionDomain(selected.id, null);
+                      } else {
+                        updateFunctionDomain(selected.id, [...scene.xRange]);
+                      }
+                    }}
+                  />
+                  Use current viewport range
+                </label>
               </div>
+
+              {selected.domain !== null && (
+                <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
+                  <label>Custom Domain</label>
+                  <div style={{ display: "flex", gap: 8 }}>
+                    <input
+                      type="number"
+                      step="any"
+                      value={selected.domain[0]}
+                      onChange={(e) => {
+                        const next = Number(e.target.value);
+                        if (Number.isFinite(next)) {
+                          updateFunctionDomain(selected.id, [
+                            next,
+                            selected.domain![1],
+                          ]);
+                        }
+                      }}
+                    />
+                    <input
+                      type="number"
+                      step="any"
+                      value={selected.domain[1]}
+                      onChange={(e) => {
+                        const next = Number(e.target.value);
+                        if (Number.isFinite(next)) {
+                          updateFunctionDomain(selected.id, [
+                            selected.domain![0],
+                            next,
+                          ]);
+                        }
+                      }}
+                    />
+                  </div>
+                </div>
+              )}
             </>
           )}
 
@@ -154,6 +204,20 @@ export function RightPanel() {
               </div>
             </>
           )}
+
+          <button
+            onClick={deleteSelectedObject}
+            style={{
+              marginTop: 10,
+              padding: "10px 12px",
+              border: "1px solid #d33",
+              background: "#fff5f5",
+              color: "#b00020",
+              cursor: "pointer",
+            }}
+          >
+            Delete Selected
+          </button>
         </div>
       )}
     </aside>

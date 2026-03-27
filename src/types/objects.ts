@@ -29,7 +29,7 @@ export type Line2DObject = BaseObject & {
 export type Function2DObject = BaseObject & {
   type: "function2d";
   expression: string;
-  domain: [number, number];
+  domain: [number, number] | null;
   samples: number;
   stroke: StrokeStyle;
 };
@@ -54,6 +54,8 @@ export type ProjectScene = {
   height: number;
   xRange: [number, number];
   yRange: [number, number];
+  xTickStep: number;
+  yTickStep: number;
   showGrid: boolean;
   showAxes: boolean;
 };

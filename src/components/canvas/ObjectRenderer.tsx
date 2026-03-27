@@ -1,13 +1,15 @@
 import type { PointerEvent as ReactPointerEvent } from "react";
 import type { SceneObject } from "../../types/objects";
 import { rgbaToCss } from "../../types/styles";
-import { sampleFunctionPoints } from "../../utils/graph";
+import { buildFunctionPath, sampleFunctionPoints } from "../../utils/graph";
 
 type Props = {
   object: SceneObject;
   isSelected: boolean;
   toScreenX: (x: number) => number;
   toScreenY: (y: number) => number;
+  currentXRange: [number, number];
+  viewHeight: number;
   onSelect: (id: string) => void;
   onPointerDown: (event: ReactPointerEvent<SVGGElement>, id: string) => void;
 };
@@ -17,6 +19,8 @@ export function ObjectRenderer({
   isSelected,
   toScreenX,
   toScreenY,
+  currentXRange,
+  viewHeight,
   onSelect,
   onPointerDown,
 }: Props) {
@@ -94,22 +98,17 @@ export function ObjectRenderer({
   }
 
   if (object.type === "function2d") {
+    const resolvedDomain = object.domain ?? currentXRange;
     let d = "";
 
     try {
       const points = sampleFunctionPoints(
         object.expression,
-        object.domain,
+        resolvedDomain,
         object.samples,
       );
 
-      d = points
-        .map((p, index) => {
-          const x = toScreenX(p.x);
-          const y = toScreenY(p.y);
-          return `${index === 0 ? "M" : "L"} ${x} ${y}`;
-        })
-        .join(" ");
+      d = buildFunctionPath(points, toScreenX, toScreenY, viewHeight);
     } catch {
       d = "";
     }
