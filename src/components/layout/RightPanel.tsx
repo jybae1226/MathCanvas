@@ -13,6 +13,10 @@ export function RightPanel() {
   const updateTextColor = useProjectStore((s) => s.updateTextColor);
   const updateTextSize = useProjectStore((s) => s.updateTextSize);
 
+  const updateFunctionExpression = useProjectStore(
+    (s) => s.updateFunctionExpression,
+  );
+
   const selected = useMemo(
     () => objects.find((obj) => obj.id === selectedObjectId) ?? null,
     [objects, selectedObjectId],
@@ -82,10 +86,25 @@ export function RightPanel() {
           )}
 
           {selected.type === "function2d" && (
-            <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
-              <label>Expression</label>
-              <code>{selected.expression}</code>
-            </div>
+            <>
+              <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
+                <label>Expression</label>
+                <input
+                  type="text"
+                  value={selected.expression}
+                  onChange={(e) =>
+                    updateFunctionExpression(selected.id, e.target.value)
+                  }
+                />
+              </div>
+
+              <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
+                <label>Domain</label>
+                <code>
+                  [{selected.domain[0]}, {selected.domain[1]}]
+                </code>
+              </div>
+            </>
           )}
 
           {selected.type === "text2d" && (

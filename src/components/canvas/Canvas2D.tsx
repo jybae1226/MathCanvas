@@ -72,8 +72,11 @@ export function Canvas2D() {
   return (
     <div className="canvas-wrap">
       <svg
+        id="math-diagram-svg"
+        xmlns="http://www.w3.org/2000/svg"
         width={width}
         height={height}
+        viewBox={`0 0 ${width} ${height}`}
         className="canvas-svg"
         onClick={(e) => {
           if (e.target === e.currentTarget) {
