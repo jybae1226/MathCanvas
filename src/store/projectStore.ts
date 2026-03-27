@@ -89,6 +89,14 @@ type ProjectActions = {
     dx: number,
     dy: number,
   ) => void;
+  movePolygonVertexBy: (
+    id: string,
+    vertexIndex: number,
+    dx: number,
+    dy: number,
+  ) => void;
+  moveCircleRadiusBy: (id: string, dx: number, dy: number) => void;
+  moveRegionLabelBy: (id: string, dx: number, dy: number) => void;
 
   beginInteractionHistory: () => void;
   endInteractionHistory: () => void;
@@ -1020,6 +1028,47 @@ export const useProjectStore = create<ProjectStore>((set, get) => ({
           ...obj,
           x2: obj.x2 + dx,
           y2: obj.y2 + dy,
+        };
+      }),
+    })),
+
+  movePolygonVertexBy: (id, vertexIndex, dx, dy) =>
+    set((state) => ({
+      objects: state.objects.map((obj) => {
+        if (obj.id !== id || obj.type !== "polygon2d") return obj;
+
+        return {
+          ...obj,
+          points: obj.points.map((p, index) =>
+            index === vertexIndex ? { x: p.x + dx, y: p.y + dy } : p,
+          ),
+        };
+      }),
+    })),
+
+  moveCircleRadiusBy: (id, dx, dy) =>
+    set((state) => ({
+      objects: state.objects.map((obj) => {
+        if (obj.id !== id || obj.type !== "circle2d") return obj;
+
+        const delta = Math.max(Math.abs(dx), Math.abs(dy));
+        const sign = dx + dy >= 0 ? 1 : -1;
+        return {
+          ...obj,
+          radius: Math.max(0.1, obj.radius + sign * delta),
+        };
+      }),
+    })),
+
+  moveRegionLabelBy: (id, dx, dy) =>
+    set((state) => ({
+      objects: state.objects.map((obj) => {
+        if (obj.id !== id || obj.type !== "region2d") return obj;
+
+        return {
+          ...obj,
+          labelX: obj.labelX + dx,
+          labelY: obj.labelY + dy,
         };
       }),
     })),

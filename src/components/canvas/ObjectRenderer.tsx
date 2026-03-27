@@ -10,7 +10,13 @@ import {
   sampleFunctionPoints,
 } from "../../utils/graph";
 
-type DragTarget = "move" | "line-start" | "line-end";
+type DragTarget =
+  | "move"
+  | "line-start"
+  | "line-end"
+  | "polygon-vertex"
+  | "circle-radius"
+  | "region-label";
 
 type Props = {
   object: SceneObject;
@@ -26,6 +32,7 @@ type Props = {
     event: ReactPointerEvent<SVGGElement>,
     id: string,
     target: DragTarget,
+    meta?: number,
   ) => void;
 };
 
@@ -92,16 +99,24 @@ export function ObjectRenderer({
           strokeWidth={isSelected ? 2 : 0}
         />
         {object.labelText && (
-          <text
-            x={toScreenX(object.labelX)}
-            y={toScreenY(object.labelY)}
-            fill={rgbaToCss(object.labelStyle.color)}
-            fontSize={object.labelStyle.fontSize}
-            fontFamily={object.labelStyle.fontFamily}
-            textAnchor="middle"
+          <g
+            onPointerDown={(e) => {
+              e.stopPropagation();
+              onPointerDown(e, object.id, "region-label");
+            }}
+            style={{ cursor: "move" }}
           >
-            {object.labelText}
-          </text>
+            <text
+              x={toScreenX(object.labelX)}
+              y={toScreenY(object.labelY)}
+              fill={rgbaToCss(object.labelStyle.color)}
+              fontSize={object.labelStyle.fontSize}
+              fontFamily={object.labelStyle.fontFamily}
+              textAnchor="middle"
+            >
+              {object.labelText}
+            </text>
+          </g>
         )}
       </g>
     );
@@ -220,7 +235,12 @@ export function ObjectRenderer({
   }
 
   if (object.type === "circle2d") {
+    const cx = toScreenX(object.cx);
+    const cy = toScreenY(object.cy);
     const rPx = object.radius * Math.abs(toScreenX(1) - toScreenX(0));
+    const handleX = toScreenX(object.cx + object.radius);
+    const handleY = toScreenY(object.cy);
+
     return (
       <g
         onClick={() => onSelect(object.id)}
@@ -228,31 +248,41 @@ export function ObjectRenderer({
         style={{ cursor: "pointer" }}
       >
         <circle
-          cx={toScreenX(object.cx)}
-          cy={toScreenY(object.cy)}
+          cx={cx}
+          cy={cy}
           r={rPx}
           stroke={rgbaToCss(object.stroke.color)}
           strokeWidth={object.stroke.width}
           fill={object.fill.enabled ? rgbaToCss(object.fill.color) : "none"}
         />
         {object.showCenter && (
-          <circle
-            cx={toScreenX(object.cx)}
-            cy={toScreenY(object.cy)}
-            r={3}
-            fill={rgbaToCss(object.stroke.color)}
-          />
+          <circle cx={cx} cy={cy} r={3} fill={rgbaToCss(object.stroke.color)} />
         )}
         {isSelected && (
-          <circle
-            cx={toScreenX(object.cx)}
-            cy={toScreenY(object.cy)}
-            r={rPx + 5}
-            fill="none"
-            stroke="#ff9800"
-            strokeWidth={1.5}
-            strokeDasharray="4 4"
-          />
+          <>
+            <circle
+              cx={cx}
+              cy={cy}
+              r={rPx + 5}
+              fill="none"
+              stroke="#ff9800"
+              strokeWidth={1.5}
+              strokeDasharray="4 4"
+            />
+            <circle
+              cx={handleX}
+              cy={handleY}
+              r={6}
+              fill="#ffffff"
+              stroke="#ff9800"
+              strokeWidth={2}
+              onPointerDown={(e) => {
+                e.stopPropagation();
+                onPointerDown(e, object.id, "circle-radius");
+              }}
+              style={{ cursor: "ew-resize" }}
+            />
+          </>
         )}
       </g>
     );
@@ -274,13 +304,31 @@ export function ObjectRenderer({
           fill={object.fill.enabled ? rgbaToCss(object.fill.color) : "none"}
         />
         {isSelected && (
-          <path
-            d={d}
-            stroke="#ff9800"
-            strokeWidth={object.stroke.width + 3}
-            fill="none"
-            strokeOpacity={0.35}
-          />
+          <>
+            <path
+              d={d}
+              stroke="#ff9800"
+              strokeWidth={object.stroke.width + 3}
+              fill="none"
+              strokeOpacity={0.35}
+            />
+            {object.points.map((p, index) => (
+              <circle
+                key={index}
+                cx={toScreenX(p.x)}
+                cy={toScreenY(p.y)}
+                r={6}
+                fill="#ffffff"
+                stroke="#ff9800"
+                strokeWidth={2}
+                onPointerDown={(e) => {
+                  e.stopPropagation();
+                  onPointerDown(e, object.id, "polygon-vertex", index);
+                }}
+                style={{ cursor: "grab" }}
+              />
+            ))}
+          </>
         )}
       </g>
     );

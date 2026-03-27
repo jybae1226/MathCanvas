@@ -36,7 +36,15 @@ function snapValue(value: number, step: number): number {
   return Math.round(value / step) * step;
 }
 
-type DragMode = null | "move" | "line-start" | "line-end" | "pan";
+type DragMode =
+  | null
+  | "move"
+  | "line-start"
+  | "line-end"
+  | "polygon-vertex"
+  | "circle-radius"
+  | "region-label"
+  | "pan";
 
 export function Canvas2D() {
   const scene = useProjectStore((s) => s.scene);
@@ -45,6 +53,9 @@ export function Canvas2D() {
   const selectObject = useProjectStore((s) => s.selectObject);
   const moveObjectBy = useProjectStore((s) => s.moveObjectBy);
   const moveLineEndpointBy = useProjectStore((s) => s.moveLineEndpointBy);
+  const movePolygonVertexBy = useProjectStore((s) => s.movePolygonVertexBy);
+  const moveCircleRadiusBy = useProjectStore((s) => s.moveCircleRadiusBy);
+  const moveRegionLabelBy = useProjectStore((s) => s.moveRegionLabelBy);
   const beginInteractionHistory = useProjectStore(
     (s) => s.beginInteractionHistory,
   );
@@ -60,11 +71,13 @@ export function Canvas2D() {
     mode: DragMode;
     lastClientX: number;
     lastClientY: number;
+    meta?: number;
   }>({
     objectId: null,
     mode: null,
     lastClientX: 0,
     lastClientY: 0,
+    meta: undefined,
   });
 
   const {
@@ -241,6 +254,7 @@ export function Canvas2D() {
             dragRef.current.objectId = null;
             dragRef.current.lastClientX = e.clientX;
             dragRef.current.lastClientY = e.clientY;
+            dragRef.current.meta = undefined;
           }
         }}
         onPointerMove={(e) => {
@@ -256,7 +270,7 @@ export function Canvas2D() {
           let dx = screenDxToWorld(dxPixels);
           let dy = screenDyToWorld(dyPixels);
 
-          if (snapToGrid && mode !== "pan") {
+          if (snapToGrid && mode !== "pan" && mode !== "circle-radius") {
             dx = snapValue(dx, xTickStep);
             dy = snapValue(dy, yTickStep);
             if (dx === 0 && dy === 0) return;
@@ -285,16 +299,34 @@ export function Canvas2D() {
 
           if (mode === "line-end") {
             moveLineEndpointBy(currentId, "end", dx, dy);
+            return;
+          }
+
+          if (mode === "polygon-vertex") {
+            const vertexIndex = dragRef.current.meta ?? 0;
+            movePolygonVertexBy(currentId, vertexIndex, dx, dy);
+            return;
+          }
+
+          if (mode === "circle-radius") {
+            moveCircleRadiusBy(currentId, dx, dy);
+            return;
+          }
+
+          if (mode === "region-label") {
+            moveRegionLabelBy(currentId, dx, dy);
           }
         }}
         onPointerUp={() => {
           dragRef.current.objectId = null;
           dragRef.current.mode = null;
+          dragRef.current.meta = undefined;
           endInteractionHistory();
         }}
         onPointerLeave={() => {
           dragRef.current.objectId = null;
           dragRef.current.mode = null;
+          dragRef.current.meta = undefined;
           endInteractionHistory();
         }}
         onWheel={(e) => {
@@ -467,7 +499,7 @@ export function Canvas2D() {
             currentYRange={yRange}
             viewHeight={height}
             onSelect={selectObject}
-            onPointerDown={(e, id, target) => {
+            onPointerDown={(e, id, target, meta) => {
               if (activeTool !== "select") return;
               e.stopPropagation();
               beginInteractionHistory();
@@ -475,6 +507,7 @@ export function Canvas2D() {
               dragRef.current.mode = target;
               dragRef.current.lastClientX = e.clientX;
               dragRef.current.lastClientY = e.clientY;
+              dragRef.current.meta = meta;
               selectObject(id);
             }}
           />
@@ -492,7 +525,7 @@ export function Canvas2D() {
             currentYRange={yRange}
             viewHeight={height}
             onSelect={selectObject}
-            onPointerDown={(e, id, target) => {
+            onPointerDown={(e, id, target, meta) => {
               if (activeTool !== "select") return;
               e.stopPropagation();
               beginInteractionHistory();
@@ -500,6 +533,7 @@ export function Canvas2D() {
               dragRef.current.mode = target;
               dragRef.current.lastClientX = e.clientX;
               dragRef.current.lastClientY = e.clientY;
+              dragRef.current.meta = meta;
               selectObject(id);
             }}
           />
