@@ -5,8 +5,13 @@ import { rgbaToHex } from "../../types/styles";
 export function RightPanel() {
   const objects = useProjectStore((s) => s.objects);
   const selectedObjectId = useProjectStore((s) => s.selectedObjectId);
+
   const updateStrokeColor = useProjectStore((s) => s.updateStrokeColor);
   const updateStrokeWidth = useProjectStore((s) => s.updateStrokeWidth);
+
+  const updateTextContent = useProjectStore((s) => s.updateTextContent);
+  const updateTextColor = useProjectStore((s) => s.updateTextColor);
+  const updateTextSize = useProjectStore((s) => s.updateTextSize);
 
   const selected = useMemo(
     () => objects.find((obj) => obj.id === selectedObjectId) ?? null,
@@ -41,8 +46,10 @@ export function RightPanel() {
 
           {"stroke" in selected && (
             <>
-              <div style={{ display: "flex", justifyContent: "space-between" }}>
-                <label>Color</label>
+              <div
+                style={{ display: "flex", justifyContent: "space-between" }}
+              >
+                <label>Stroke</label>
                 <input
                   type="color"
                   value={rgbaToHex(selected.stroke.color)}
@@ -52,7 +59,13 @@ export function RightPanel() {
                 />
               </div>
 
-              <div style={{ display: "flex", justifyContent: "space-between", gap: 12 }}>
+              <div
+                style={{
+                  display: "flex",
+                  justifyContent: "space-between",
+                  gap: 12,
+                }}
+              >
                 <label>Width</label>
                 <input
                   type="range"
@@ -73,6 +86,54 @@ export function RightPanel() {
               <label>Expression</label>
               <code>{selected.expression}</code>
             </div>
+          )}
+
+          {selected.type === "text2d" && (
+            <>
+              <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
+                <label>Text</label>
+                <input
+                  type="text"
+                  value={selected.text}
+                  onChange={(e) =>
+                    updateTextContent(selected.id, e.target.value)
+                  }
+                />
+              </div>
+
+              <div
+                style={{ display: "flex", justifyContent: "space-between" }}
+              >
+                <label>Text Color</label>
+                <input
+                  type="color"
+                  value={rgbaToHex(selected.textStyle.color)}
+                  onChange={(e) =>
+                    updateTextColor(selected.id, e.target.value)
+                  }
+                />
+              </div>
+
+              <div
+                style={{
+                  display: "flex",
+                  justifyContent: "space-between",
+                  gap: 12,
+                }}
+              >
+                <label>Font Size</label>
+                <input
+                  type="range"
+                  min={10}
+                  max={72}
+                  step={1}
+                  value={selected.textStyle.fontSize}
+                  onChange={(e) =>
+                    updateTextSize(selected.id, Number(e.target.value))
+                  }
+                />
+              </div>
+            </>
           )}
         </div>
       )}

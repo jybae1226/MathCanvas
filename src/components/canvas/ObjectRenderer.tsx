@@ -1,3 +1,4 @@
+import type { PointerEvent as ReactPointerEvent } from "react";
 import type { SceneObject } from "../../types/objects";
 import { rgbaToCss } from "../../types/styles";
 import { sampleFunctionPoints } from "../../utils/graph";
@@ -8,6 +9,7 @@ type Props = {
   toScreenX: (x: number) => number;
   toScreenY: (y: number) => number;
   onSelect: (id: string) => void;
+  onPointerDown: (event: ReactPointerEvent<SVGGElement>, id: string) => void;
 };
 
 export function ObjectRenderer({
@@ -16,12 +18,17 @@ export function ObjectRenderer({
   toScreenX,
   toScreenY,
   onSelect,
+  onPointerDown,
 }: Props) {
   if (!object.visible) return null;
 
   if (object.type === "point2d") {
     return (
-      <g onClick={() => onSelect(object.id)} style={{ cursor: "pointer" }}>
+      <g
+        onClick={() => onSelect(object.id)}
+        onPointerDown={(e) => onPointerDown(e, object.id)}
+        style={{ cursor: "pointer" }}
+      >
         <circle
           cx={toScreenX(object.x)}
           cy={toScreenY(object.y)}
@@ -57,7 +64,11 @@ export function ObjectRenderer({
 
   if (object.type === "line2d") {
     return (
-      <g onClick={() => onSelect(object.id)} style={{ cursor: "pointer" }}>
+      <g
+        onClick={() => onSelect(object.id)}
+        onPointerDown={(e) => onPointerDown(e, object.id)}
+        style={{ cursor: "pointer" }}
+      >
         <line
           x1={toScreenX(object.x1)}
           y1={toScreenY(object.y1)}
@@ -119,6 +130,40 @@ export function ObjectRenderer({
             stroke="#ff9800"
             strokeWidth={object.stroke.width + 6}
             strokeOpacity={0.15}
+          />
+        )}
+      </g>
+    );
+  }
+
+  if (object.type === "text2d") {
+    return (
+      <g
+        onClick={() => onSelect(object.id)}
+        onPointerDown={(e) => onPointerDown(e, object.id)}
+        style={{ cursor: "move" }}
+      >
+        <text
+          x={toScreenX(object.x)}
+          y={toScreenY(object.y)}
+          fill={rgbaToCss(object.textStyle.color)}
+          fontSize={object.textStyle.fontSize}
+          fontFamily={object.textStyle.fontFamily}
+          fontWeight={object.textStyle.bold ? 700 : 400}
+          fontStyle={object.textStyle.italic ? "italic" : "normal"}
+        >
+          {object.text}
+        </text>
+
+        {isSelected && (
+          <circle
+            cx={toScreenX(object.x)}
+            cy={toScreenY(object.y)}
+            r={6}
+            fill="none"
+            stroke="#ff9800"
+            strokeWidth={1.5}
+            strokeDasharray="4 4"
           />
         )}
       </g>

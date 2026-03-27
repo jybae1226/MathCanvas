@@ -1,4 +1,4 @@
-import type { FillStyle, StrokeStyle } from "./styles";
+import type { FillStyle, StrokeStyle, TextStyle } from "./styles";
 
 export type BaseObject = {
   id: string;
@@ -34,7 +34,19 @@ export type Function2DObject = BaseObject & {
   stroke: StrokeStyle;
 };
 
-export type SceneObject = Point2DObject | Line2DObject | Function2DObject;
+export type Text2DObject = BaseObject & {
+  type: "text2d";
+  x: number;
+  y: number;
+  text: string;
+  textStyle: TextStyle;
+};
+
+export type SceneObject =
+  | Point2DObject
+  | Line2DObject
+  | Function2DObject
+  | Text2DObject;
 
 export type ProjectScene = {
   mode: "2d";

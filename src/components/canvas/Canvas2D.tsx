@@ -1,4 +1,4 @@
-import { useMemo } from "react";
+import { useMemo, useRef } from "react";
 import { useProjectStore } from "../../store/projectStore";
 import { ObjectRenderer } from "./ObjectRenderer";
 
@@ -7,6 +7,17 @@ export function Canvas2D() {
   const objects = useProjectStore((s) => s.objects);
   const selectedObjectId = useProjectStore((s) => s.selectedObjectId);
   const selectObject = useProjectStore((s) => s.selectObject);
+  const moveObjectBy = useProjectStore((s) => s.moveObjectBy);
+
+  const dragRef = useRef<{
+    objectId: string | null;
+    lastClientX: number;
+    lastClientY: number;
+  }>({
+    objectId: null,
+    lastClientX: 0,
+    lastClientY: 0,
+  });
 
   const { width, height, xRange, yRange, showAxes, showGrid } = scene;
 
@@ -15,6 +26,12 @@ export function Canvas2D() {
 
   const toScreenY = (y: number) =>
     height - ((y - yRange[0]) / (yRange[1] - yRange[0])) * height;
+
+  const screenDxToWorld = (dxPixels: number) =>
+    (dxPixels / width) * (xRange[1] - xRange[0]);
+
+  const screenDyToWorld = (dyPixels: number) =>
+    -(dyPixels / height) * (yRange[1] - yRange[0]);
 
   const verticalGrid = useMemo(() => {
     const lines = [];
@@ -63,6 +80,28 @@ export function Canvas2D() {
             selectObject(null);
           }
         }}
+        onPointerMove={(e) => {
+          const currentId = dragRef.current.objectId;
+          if (!currentId) return;
+
+          const dxPixels = e.clientX - dragRef.current.lastClientX;
+          const dyPixels = e.clientY - dragRef.current.lastClientY;
+
+          dragRef.current.lastClientX = e.clientX;
+          dragRef.current.lastClientY = e.clientY;
+
+          moveObjectBy(
+            currentId,
+            screenDxToWorld(dxPixels),
+            screenDyToWorld(dyPixels),
+          );
+        }}
+        onPointerUp={() => {
+          dragRef.current.objectId = null;
+        }}
+        onPointerLeave={() => {
+          dragRef.current.objectId = null;
+        }}
       >
         <rect x={0} y={0} width={width} height={height} fill="white" />
 
@@ -102,6 +141,13 @@ export function Canvas2D() {
             toScreenX={toScreenX}
             toScreenY={toScreenY}
             onSelect={selectObject}
+            onPointerDown={(e, id) => {
+              e.stopPropagation();
+              dragRef.current.objectId = id;
+              dragRef.current.lastClientX = e.clientX;
+              dragRef.current.lastClientY = e.clientY;
+              selectObject(id);
+            }}
           />
         ))}
       </svg>

@@ -16,6 +16,14 @@ export type FillStyle = {
   enabled: boolean;
 };
 
+export type TextStyle = {
+  color: RGBA;
+  fontSize: number;
+  fontFamily: string;
+  bold?: boolean;
+  italic?: boolean;
+};
+
 export const defaultStroke = (): StrokeStyle => ({
   color: { r: 30, g: 30, b: 30, a: 1 },
   width: 2,
@@ -27,6 +35,14 @@ export const defaultFill = (): FillStyle => ({
   enabled: false,
 });
 
+export const defaultTextStyle = (): TextStyle => ({
+  color: { r: 20, g: 20, b: 20, a: 1 },
+  fontSize: 22,
+  fontFamily: "Arial",
+  bold: false,
+  italic: false,
+});
+
 export const rgbaToCss = (rgba: RGBA): string =>
   `rgba(${rgba.r}, ${rgba.g}, ${rgba.b}, ${rgba.a})`;
 
@@ -34,7 +50,10 @@ export const hexToRgba = (hex: string, alpha = 1): RGBA => {
   const cleaned = hex.replace("#", "");
   const normalized =
     cleaned.length === 3
-      ? cleaned.split("").map((c) => c + c).join("")
+      ? cleaned
+          .split("")
+          .map((c) => c + c)
+          .join("")
       : cleaned;
 
   const num = Number.parseInt(normalized, 16);

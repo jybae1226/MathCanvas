@@ -4,6 +4,8 @@ export function LeftPanel() {
   const addPoint = useProjectStore((s) => s.addPoint);
   const addLine = useProjectStore((s) => s.addLine);
   const addFunction = useProjectStore((s) => s.addFunction);
+  const addText = useProjectStore((s) => s.addText);
+
   const objects = useProjectStore((s) => s.objects);
   const selectedObjectId = useProjectStore((s) => s.selectedObjectId);
   const selectObject = useProjectStore((s) => s.selectObject);
@@ -24,6 +26,7 @@ export function LeftPanel() {
           <button onClick={addPoint}>+ Point</button>
           <button onClick={addLine}>+ Line</button>
           <button onClick={addFunction}>+ Function</button>
+          <button onClick={addText}>+ Text</button>
         </div>
       </section>
 
@@ -38,8 +41,7 @@ export function LeftPanel() {
                 textAlign: "left",
                 padding: "10px 12px",
                 border: "1px solid #ddd",
-                background:
-                  selectedObjectId === obj.id ? "#eff6ff" : "#fff",
+                background: selectedObjectId === obj.id ? "#eff6ff" : "#fff",
               }}
             >
               {obj.name} · {obj.type}
