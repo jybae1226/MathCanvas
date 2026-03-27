@@ -31,12 +31,15 @@ function clamp(value: number, min: number, max: number): number {
   return Math.min(max, Math.max(min, value));
 }
 
+type DragMode = null | "move" | "line-start" | "line-end" | "pan";
+
 export function Canvas2D() {
   const scene = useProjectStore((s) => s.scene);
   const objects = useProjectStore((s) => s.objects);
   const selectedObjectId = useProjectStore((s) => s.selectedObjectId);
   const selectObject = useProjectStore((s) => s.selectObject);
   const moveObjectBy = useProjectStore((s) => s.moveObjectBy);
+  const moveLineEndpointBy = useProjectStore((s) => s.moveLineEndpointBy);
   const beginInteractionHistory = useProjectStore(
     (s) => s.beginInteractionHistory,
   );
@@ -44,13 +47,16 @@ export function Canvas2D() {
   const activeTool = useProjectStore((s) => s.activeTool);
   const lineDraftStart = useProjectStore((s) => s.lineDraftStart);
   const handleCanvasWorldClick = useProjectStore((s) => s.handleCanvasWorldClick);
+  const updateSceneDirect = useProjectStore((s) => s.updateSceneDirect);
 
   const dragRef = useRef<{
     objectId: string | null;
+    mode: DragMode;
     lastClientX: number;
     lastClientY: number;
   }>({
     objectId: null,
+    mode: null,
     lastClientX: 0,
     lastClientY: 0,
   });
@@ -173,6 +179,7 @@ export function Canvas2D() {
         height={height}
         viewBox={`0 0 ${width} ${height}`}
         className="canvas-svg"
+        onContextMenu={(e) => e.preventDefault()}
         onClick={(e) => {
           const rect = e.currentTarget.getBoundingClientRect();
           const sx = e.clientX - rect.left;
@@ -189,9 +196,20 @@ export function Canvas2D() {
             selectObject(null);
           }
         }}
+        onPointerDown={(e) => {
+          if (e.target !== e.currentTarget) return;
+
+          if (e.altKey || e.button === 1) {
+            beginInteractionHistory();
+            dragRef.current.mode = "pan";
+            dragRef.current.objectId = null;
+            dragRef.current.lastClientX = e.clientX;
+            dragRef.current.lastClientY = e.clientY;
+          }
+        }}
         onPointerMove={(e) => {
-          const currentId = dragRef.current.objectId;
-          if (!currentId) return;
+          const mode = dragRef.current.mode;
+          if (!mode) return;
 
           const dxPixels = e.clientX - dragRef.current.lastClientX;
           const dyPixels = e.clientY - dragRef.current.lastClientY;
@@ -199,19 +217,78 @@ export function Canvas2D() {
           dragRef.current.lastClientX = e.clientX;
           dragRef.current.lastClientY = e.clientY;
 
-          moveObjectBy(
-            currentId,
-            screenDxToWorld(dxPixels),
-            screenDyToWorld(dyPixels),
-          );
+          if (mode === "pan") {
+            const dx = screenDxToWorld(dxPixels);
+            const dy = screenDyToWorld(dyPixels);
+
+            updateSceneDirect({
+              xRange: [xRange[0] - dx, xRange[1] - dx],
+              yRange: [yRange[0] - dy, yRange[1] - dy],
+            });
+            return;
+          }
+
+          const currentId = dragRef.current.objectId;
+          if (!currentId) return;
+
+          if (mode === "move") {
+            moveObjectBy(
+              currentId,
+              screenDxToWorld(dxPixels),
+              screenDyToWorld(dyPixels),
+            );
+            return;
+          }
+
+          if (mode === "line-start") {
+            moveLineEndpointBy(
+              currentId,
+              "start",
+              screenDxToWorld(dxPixels),
+              screenDyToWorld(dyPixels),
+            );
+            return;
+          }
+
+          if (mode === "line-end") {
+            moveLineEndpointBy(
+              currentId,
+              "end",
+              screenDxToWorld(dxPixels),
+              screenDyToWorld(dyPixels),
+            );
+          }
         }}
         onPointerUp={() => {
           dragRef.current.objectId = null;
+          dragRef.current.mode = null;
           endInteractionHistory();
         }}
         onPointerLeave={() => {
           dragRef.current.objectId = null;
+          dragRef.current.mode = null;
           endInteractionHistory();
+        }}
+        onWheel={(e) => {
+          e.preventDefault();
+
+          const rect = e.currentTarget.getBoundingClientRect();
+          const sx = e.clientX - rect.left;
+          const sy = e.clientY - rect.top;
+          const wx = toWorldXFromSvg(sx);
+          const wy = toWorldYFromSvg(sy);
+
+          const zoomFactor = e.deltaY < 0 ? 0.9 : 1.1;
+
+          const nextXMin = wx - (wx - xRange[0]) * zoomFactor;
+          const nextXMax = wx + (xRange[1] - wx) * zoomFactor;
+          const nextYMin = wy - (wy - yRange[0]) * zoomFactor;
+          const nextYMax = wy + (yRange[1] - wy) * zoomFactor;
+
+          updateSceneDirect({
+            xRange: [nextXMin, nextXMax],
+            yRange: [nextYMin, nextYMax],
+          });
         }}
       >
         <rect x={0} y={0} width={width} height={height} fill="white" />
@@ -277,14 +354,15 @@ export function Canvas2D() {
             currentXRange={xRange}
             viewHeight={height}
             onSelect={selectObject}
-            onPointerDown={(e, id) => {
+            onPointerDown={(e, id, target) => {
               if (activeTool !== "select") return;
 
               e.stopPropagation();
+              beginInteractionHistory();
               dragRef.current.objectId = id;
+              dragRef.current.mode = target;
               dragRef.current.lastClientX = e.clientX;
               dragRef.current.lastClientY = e.clientY;
-              beginInteractionHistory();
               selectObject(id);
             }}
           />

@@ -11,6 +11,7 @@ export function RightPanel() {
   const updateStrokeWidth = useProjectStore((s) => s.updateStrokeWidth);
 
   const updateTextContent = useProjectStore((s) => s.updateTextContent);
+  const updateFormulaContent = useProjectStore((s) => s.updateFormulaContent);
   const updateTextColor = useProjectStore((s) => s.updateTextColor);
   const updateTextSize = useProjectStore((s) => s.updateTextSize);
 
@@ -174,6 +175,54 @@ export function RightPanel() {
                 style={{ display: "flex", justifyContent: "space-between" }}
               >
                 <label>Text Color</label>
+                <input
+                  type="color"
+                  value={rgbaToHex(selected.textStyle.color)}
+                  onChange={(e) =>
+                    updateTextColor(selected.id, e.target.value)
+                  }
+                />
+              </div>
+
+              <div
+                style={{
+                  display: "flex",
+                  justifyContent: "space-between",
+                  gap: 12,
+                }}
+              >
+                <label>Font Size</label>
+                <input
+                  type="range"
+                  min={10}
+                  max={72}
+                  step={1}
+                  value={selected.textStyle.fontSize}
+                  onChange={(e) =>
+                    updateTextSize(selected.id, Number(e.target.value))
+                  }
+                />
+              </div>
+            </>
+          )}
+
+          {selected.type === "formula2d" && (
+            <>
+              <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
+                <label>LaTeX</label>
+                <input
+                  type="text"
+                  value={selected.latex}
+                  onChange={(e) =>
+                    updateFormulaContent(selected.id, e.target.value)
+                  }
+                />
+              </div>
+
+              <div
+                style={{ display: "flex", justifyContent: "space-between" }}
+              >
+                <label>Formula Color</label>
                 <input
                   type="color"
                   value={rgbaToHex(selected.textStyle.color)}

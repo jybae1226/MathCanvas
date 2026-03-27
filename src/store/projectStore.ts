@@ -21,6 +21,7 @@ type ProjectActions = {
   startLineTool: () => void;
   addFunction: () => void;
   addText: () => void;
+  addFormula: () => void;
 
   setActiveTool: (tool: ToolMode) => void;
   handleCanvasWorldClick: (x: number, y: number) => void;
@@ -32,6 +33,7 @@ type ProjectActions = {
   updateStrokeWidth: (id: string, width: number) => void;
 
   updateTextContent: (id: string, text: string) => void;
+  updateFormulaContent: (id: string, latex: string) => void;
   updateTextColor: (id: string, colorHex: string) => void;
   updateTextSize: (id: string, fontSize: number) => void;
 
@@ -39,8 +41,16 @@ type ProjectActions = {
   updateFunctionDomain: (id: string, domain: [number, number] | null) => void;
 
   updateScene: (patch: Partial<ProjectState["scene"]>) => void;
+  updateSceneDirect: (patch: Partial<ProjectState["scene"]>) => void;
 
   moveObjectBy: (id: string, dx: number, dy: number) => void;
+  moveLineEndpointBy: (
+    id: string,
+    endpoint: "start" | "end",
+    dx: number,
+    dy: number,
+  ) => void;
+
   beginInteractionHistory: () => void;
   endInteractionHistory: () => void;
 
@@ -207,6 +217,35 @@ export const useProjectStore = create<ProjectStore>((set, get) => ({
       }),
     ),
 
+  addFormula: () =>
+    set((state) =>
+      withHistory(state, () => {
+        const id = makeId("formula");
+        return {
+          selectedObjectId: id,
+          objects: [
+            ...state.objects,
+            {
+              id,
+              name: "Formula",
+              type: "formula2d",
+              visible: true,
+              locked: false,
+              x: 0,
+              y: 0,
+              latex: "\\int_0^1 x^2\\,dx",
+              textStyle: {
+                ...defaultTextStyle(),
+                fontSize: 24,
+              },
+            },
+          ],
+          activeTool: "select",
+          lineDraftStart: null,
+        };
+      }),
+    ),
+
   setActiveTool: (tool) =>
     set(() => ({
       activeTool: tool,
@@ -314,11 +353,21 @@ export const useProjectStore = create<ProjectStore>((set, get) => ({
       })),
     ),
 
+  updateFormulaContent: (id, latex) =>
+    set((state) =>
+      withHistory(state, () => ({
+        objects: state.objects.map((obj) =>
+          obj.id === id && obj.type === "formula2d" ? { ...obj, latex } : obj,
+        ),
+      })),
+    ),
+
   updateTextColor: (id, colorHex) =>
     set((state) =>
       withHistory(state, () => ({
         objects: state.objects.map((obj) =>
-          obj.id === id && obj.type === "text2d"
+          obj.id === id &&
+          (obj.type === "text2d" || obj.type === "formula2d")
             ? {
                 ...obj,
                 textStyle: {
@@ -335,7 +384,8 @@ export const useProjectStore = create<ProjectStore>((set, get) => ({
     set((state) =>
       withHistory(state, () => ({
         objects: state.objects.map((obj) =>
-          obj.id === id && obj.type === "text2d"
+          obj.id === id &&
+          (obj.type === "text2d" || obj.type === "formula2d")
             ? {
                 ...obj,
                 textStyle: {
@@ -386,6 +436,14 @@ export const useProjectStore = create<ProjectStore>((set, get) => ({
       })),
     ),
 
+  updateSceneDirect: (patch) =>
+    set((state) => ({
+      scene: {
+        ...state.scene,
+        ...patch,
+      },
+    })),
+
   beginInteractionHistory: () =>
     set((state) => {
       if (state.interactionSnapshot !== null) return state;
@@ -427,7 +485,7 @@ export const useProjectStore = create<ProjectStore>((set, get) => ({
           };
         }
 
-        if (obj.type === "text2d") {
+        if (obj.type === "text2d" || obj.type === "formula2d") {
           return {
             ...obj,
             x: obj.x + dx,
@@ -436,6 +494,27 @@ export const useProjectStore = create<ProjectStore>((set, get) => ({
         }
 
         return obj;
+      }),
+    })),
+
+  moveLineEndpointBy: (id, endpoint, dx, dy) =>
+    set((state) => ({
+      objects: state.objects.map((obj) => {
+        if (obj.id !== id || obj.type !== "line2d") return obj;
+
+        if (endpoint === "start") {
+          return {
+            ...obj,
+            x1: obj.x1 + dx,
+            y1: obj.y1 + dy,
+          };
+        }
+
+        return {
+          ...obj,
+          x2: obj.x2 + dx,
+          y2: obj.y2 + dy,
+        };
       }),
     })),
 

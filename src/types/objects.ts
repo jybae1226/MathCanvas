@@ -42,11 +42,20 @@ export type Text2DObject = BaseObject & {
   textStyle: TextStyle;
 };
 
+export type Formula2DObject = BaseObject & {
+  type: "formula2d";
+  x: number;
+  y: number;
+  latex: string;
+  textStyle: TextStyle;
+};
+
 export type SceneObject =
   | Point2DObject
   | Line2DObject
   | Function2DObject
-  | Text2DObject;
+  | Text2DObject
+  | Formula2DObject;
 
 export type ProjectScene = {
   mode: "2d";

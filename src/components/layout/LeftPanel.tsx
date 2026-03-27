@@ -5,6 +5,7 @@ export function LeftPanel() {
   const startLineTool = useProjectStore((s) => s.startLineTool);
   const addFunction = useProjectStore((s) => s.addFunction);
   const addText = useProjectStore((s) => s.addText);
+  const addFormula = useProjectStore((s) => s.addFormula);
 
   const objects = useProjectStore((s) => s.objects);
   const selectedObjectId = useProjectStore((s) => s.selectedObjectId);
@@ -36,6 +37,7 @@ export function LeftPanel() {
           </button>
           <button onClick={addFunction}>+ Function</button>
           <button onClick={addText}>+ Text</button>
+          <button onClick={addFormula}>+ Formula</button>
         </div>
 
         <div style={{ marginTop: 12, fontSize: 13, color: "#555" }}>
@@ -45,6 +47,11 @@ export function LeftPanel() {
               {lineDraftStart ? "두 번째 점을 클릭하세요." : "첫 번째 점을 클릭하세요."}
             </div>
           )}
+          <div style={{ marginTop: 8 }}>
+            Zoom: 마우스 휠
+            <br />
+            Pan: Alt + 드래그 또는 가운데 버튼 드래그
+          </div>
         </div>
       </section>
 
