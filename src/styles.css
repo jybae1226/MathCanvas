@@ -10,3 +10,18 @@ body,
   height: 100%;
   font-family: Arial, Helvetica, sans-serif;
 }
+
+button,
+input {
+  font: inherit;
+}
+
+.canvas-wrap {
+  background: #fff;
+  border: 1px solid #d1d5db;
+  box-shadow: 0 10px 25px rgba(0, 0, 0, 0.06);
+}
+
+.canvas-svg {
+  display: block;
+}
