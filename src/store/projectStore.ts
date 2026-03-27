@@ -18,10 +18,19 @@ type ToolMode = "select" | "line";
 
 type ProjectActions = {
   addPoint: () => void;
+  addCircle: () => void;
+  addEllipse: () => void;
+  addPolygon: () => void;
   startLineTool: () => void;
   addFunction: () => void;
   addText: () => void;
   addFormula: () => void;
+  addRegionFill: (
+    curveAId: string,
+    curveBId: string,
+    xStart: number,
+    xEnd: number,
+  ) => void;
 
   setActiveTool: (tool: ToolMode) => void;
   handleCanvasWorldClick: (x: number, y: number) => void;
@@ -42,6 +51,14 @@ type ProjectActions = {
 
   updateScene: (patch: Partial<ProjectState["scene"]>) => void;
   updateSceneDirect: (patch: Partial<ProjectState["scene"]>) => void;
+
+  updatePointLabel: (id: string, label: string) => void;
+  updatePointFilled: (id: string, filled: boolean) => void;
+
+  updateRegionFillColor: (id: string, colorHex: string) => void;
+  updateRegionOpacity: (id: string, opacity: number) => void;
+  updateRegionXStart: (id: string, xStart: number) => void;
+  updateRegionXEnd: (id: string, xEnd: number) => void;
 
   moveObjectBy: (id: string, dx: number, dy: number) => void;
   moveLineEndpointBy: (
@@ -84,6 +101,7 @@ const initialState: ProjectState = {
     yTickStep: 1,
     showGrid: true,
     showAxes: true,
+    snapToGrid: false,
   },
   objects: [],
   selectedObjectId: null,
@@ -143,14 +161,110 @@ export const useProjectStore = create<ProjectStore>((set, get) => ({
               stroke: defaultStroke(),
               fill: {
                 ...defaultFill(),
-                enabled: true,
-                color: { r: 255, g: 255, b: 255, a: 1 },
+                enabled: false,
+                color: { r: 30, g: 30, b: 30, a: 1 },
               },
               label: "A",
             },
           ],
           activeTool: "select",
           lineDraftStart: null,
+        };
+      }),
+    ),
+
+  addCircle: () =>
+    set((state) =>
+      withHistory(state, () => {
+        const id = makeId("circle");
+        return {
+          selectedObjectId: id,
+          objects: [
+            ...state.objects,
+            {
+              id,
+              name: "Circle",
+              type: "circle2d",
+              visible: true,
+              locked: false,
+              cx: 0,
+              cy: 0,
+              radius: 2,
+              stroke: {
+                ...defaultStroke(),
+                color: { r: 0, g: 102, b: 204, a: 1 },
+              },
+              fill: {
+                enabled: true,
+                color: { r: 0, g: 102, b: 204, a: 0.12 },
+              },
+            },
+          ],
+        };
+      }),
+    ),
+
+  addEllipse: () =>
+    set((state) =>
+      withHistory(state, () => {
+        const id = makeId("ellipse");
+        return {
+          selectedObjectId: id,
+          objects: [
+            ...state.objects,
+            {
+              id,
+              name: "Ellipse",
+              type: "ellipse2d",
+              visible: true,
+              locked: false,
+              cx: 0,
+              cy: 0,
+              rx: 3,
+              ry: 1.5,
+              stroke: {
+                ...defaultStroke(),
+                color: { r: 0, g: 153, b: 102, a: 1 },
+              },
+              fill: {
+                enabled: true,
+                color: { r: 0, g: 153, b: 102, a: 0.12 },
+              },
+            },
+          ],
+        };
+      }),
+    ),
+
+  addPolygon: () =>
+    set((state) =>
+      withHistory(state, () => {
+        const id = makeId("polygon");
+        return {
+          selectedObjectId: id,
+          objects: [
+            ...state.objects,
+            {
+              id,
+              name: "Polygon",
+              type: "polygon2d",
+              visible: true,
+              locked: false,
+              points: [
+                { x: -2, y: -1 },
+                { x: 2, y: -1 },
+                { x: 0, y: 2 },
+              ],
+              stroke: {
+                ...defaultStroke(),
+                color: { r: 153, g: 51, b: 204, a: 1 },
+              },
+              fill: {
+                enabled: true,
+                color: { r: 153, g: 51, b: 204, a: 0.12 },
+              },
+            },
+          ],
         };
       }),
     ),
@@ -246,6 +360,35 @@ export const useProjectStore = create<ProjectStore>((set, get) => ({
       }),
     ),
 
+  addRegionFill: (curveAId, curveBId, xStart, xEnd) =>
+    set((state) =>
+      withHistory(state, () => {
+        const id = makeId("region");
+        return {
+          selectedObjectId: id,
+          objects: [
+            ...state.objects,
+            {
+              id,
+              name: "Region Fill",
+              type: "region2d",
+              visible: true,
+              locked: false,
+              curveAId,
+              curveBId,
+              xStart,
+              xEnd,
+              samples: 400,
+              fill: {
+                enabled: true,
+                color: { r: 255, g: 160, b: 0, a: 0.28 },
+              },
+            },
+          ],
+        };
+      }),
+    ),
+
   setActiveTool: (tool) =>
     set(() => ({
       activeTool: tool,
@@ -314,7 +457,12 @@ export const useProjectStore = create<ProjectStore>((set, get) => ({
     set((state) =>
       withHistory(state, () => ({
         objects: state.objects.map((obj) => {
-          if (obj.id !== id || !("stroke" in obj)) return obj;
+          if (
+            obj.id !== id ||
+            !("stroke" in obj)
+          ) {
+            return obj;
+          }
 
           return {
             ...obj,
@@ -331,7 +479,12 @@ export const useProjectStore = create<ProjectStore>((set, get) => ({
     set((state) =>
       withHistory(state, () => ({
         objects: state.objects.map((obj) => {
-          if (obj.id !== id || !("stroke" in obj)) return obj;
+          if (
+            obj.id !== id ||
+            !("stroke" in obj)
+          ) {
+            return obj;
+          }
 
           return {
             ...obj,
@@ -444,6 +597,96 @@ export const useProjectStore = create<ProjectStore>((set, get) => ({
       },
     })),
 
+  updatePointLabel: (id, label) =>
+    set((state) =>
+      withHistory(state, () => ({
+        objects: state.objects.map((obj) =>
+          obj.id === id && obj.type === "point2d"
+            ? {
+                ...obj,
+                label,
+              }
+            : obj,
+        ),
+      })),
+    ),
+
+  updatePointFilled: (id, filled) =>
+    set((state) =>
+      withHistory(state, () => ({
+        objects: state.objects.map((obj) =>
+          obj.id === id && obj.type === "point2d"
+            ? {
+                ...obj,
+                fill: {
+                  ...obj.fill,
+                  enabled: filled,
+                },
+              }
+            : obj,
+        ),
+      })),
+    ),
+
+  updateRegionFillColor: (id, colorHex) =>
+    set((state) =>
+      withHistory(state, () => ({
+        objects: state.objects.map((obj) =>
+          obj.id === id && obj.type === "region2d"
+            ? {
+                ...obj,
+                fill: {
+                  ...obj.fill,
+                  color: hexToRgba(colorHex, obj.fill.color.a),
+                },
+              }
+            : obj,
+        ),
+      })),
+    ),
+
+  updateRegionOpacity: (id, opacity) =>
+    set((state) =>
+      withHistory(state, () => ({
+        objects: state.objects.map((obj) =>
+          obj.id === id && obj.type === "region2d"
+            ? {
+                ...obj,
+                fill: {
+                  ...obj.fill,
+                  color: {
+                    ...obj.fill.color,
+                    a: opacity,
+                  },
+                },
+              }
+            : obj,
+        ),
+      })),
+    ),
+
+  updateRegionXStart: (id, xStart) =>
+    set((state) =>
+      withHistory(state, () => ({
+        objects: state.objects.map((obj) =>
+          obj.id === id && obj.type === "region2d"
+            ? { ...obj, xStart }
+            : obj,
+        ),
+      })),
+    ),
+
+  updateRegionXEnd: (id, xEnd) =>
+    set((state) =>
+      withHistory(state, () => ({
+        objects: state.objects.map((obj) =>
+          obj.id === id && obj.type === "region2d"
+            ? { ...obj, xEnd }
+            : obj,
+        ),
+      })),
+    ),
+
   beginInteractionHistory: () =>
     set((state) => {
       if (state.interactionSnapshot !== null) return state;
@@ -482,6 +725,32 @@ export const useProjectStore = create<ProjectStore>((set, get) => ({
             y1: obj.y1 + dy,
             x2: obj.x2 + dx,
             y2: obj.y2 + dy,
+          };
+        }
+
+        if (obj.type === "circle2d") {
+          return {
+            ...obj,
+            cx: obj.cx + dx,
+            cy: obj.cy + dy,
+          };
+        }
+
+        if (obj.type === "ellipse2d") {
+          return {
+            ...obj,
+            cx: obj.cx + dx,
+            cy: obj.cy + dy,
+          };
+        }
+
+        if (obj.type === "polygon2d") {
+          return {
+            ...obj,
+            points: obj.points.map((p) => ({
+              x: p.x + dx,
+              y: p.y + dy,
+            })),
           };
         }
 

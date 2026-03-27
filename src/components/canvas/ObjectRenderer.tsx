@@ -2,12 +2,18 @@ import type { PointerEvent as ReactPointerEvent } from "react";
 import katex from "katex";
 import type { SceneObject } from "../../types/objects";
 import { rgbaToCss } from "../../types/styles";
-import { buildFunctionPath, sampleFunctionPoints } from "../../utils/graph";
+import {
+  buildFunctionPath,
+  buildPolygonPath,
+  buildRegionPath,
+  sampleFunctionPoints,
+} from "../../utils/graph";
 
 type DragTarget = "move" | "line-start" | "line-end";
 
 type Props = {
   object: SceneObject;
+  allObjects: SceneObject[];
   isSelected: boolean;
   toScreenX: (x: number) => number;
   toScreenY: (y: number) => number;
@@ -23,6 +29,7 @@ type Props = {
 
 export function ObjectRenderer({
   object,
+  allObjects,
   isSelected,
   toScreenX,
   toScreenY,
@@ -32,6 +39,36 @@ export function ObjectRenderer({
   onPointerDown,
 }: Props) {
   if (!object.visible) return null;
+
+  if (object.type === "region2d") {
+    const curveA = allObjects.find((obj) => obj.id === object.curveAId);
+    const curveB = allObjects.find((obj) => obj.id === object.curveBId);
+
+    if (!curveA || !curveB) return null;
+
+    const d = buildRegionPath(
+      curveA,
+      curveB,
+      object.xStart,
+      object.xEnd,
+      object.samples,
+      toScreenX,
+      toScreenY,
+    );
+
+    if (!d) return null;
+
+    return (
+      <g onClick={() => onSelect(object.id)} style={{ cursor: "pointer" }}>
+        <path
+          d={d}
+          fill={rgbaToCss(object.fill.color)}
+          stroke={isSelected ? "#ff9800" : "none"}
+          strokeWidth={isSelected ? 2 : 0}
+        />
+      </g>
+    );
+  }
 
   if (object.type === "point2d") {
     return (
@@ -46,7 +83,9 @@ export function ObjectRenderer({
           r={object.radius}
           stroke={rgbaToCss(object.stroke.color)}
           strokeWidth={object.stroke.width}
-          fill={object.fill.enabled ? rgbaToCss(object.fill.color) : "none"}
+          fill={
+            object.fill.enabled ? rgbaToCss(object.fill.color) : "#ffffff"
+          }
         />
         {object.label && (
           <text
@@ -135,6 +174,96 @@ export function ObjectRenderer({
               style={{ cursor: "grab" }}
             />
           </>
+        )}
+      </g>
+    );
+  }
+
+  if (object.type === "circle2d") {
+    return (
+      <g
+        onClick={() => onSelect(object.id)}
+        onPointerDown={(e) => onPointerDown(e, object.id, "move")}
+        style={{ cursor: "pointer" }}
+      >
+        <circle
+          cx={toScreenX(object.cx)}
+          cy={toScreenY(object.cy)}
+          r={object.radius * Math.abs(toScreenX(1) - toScreenX(0))}
+          stroke={rgbaToCss(object.stroke.color)}
+          strokeWidth={object.stroke.width}
+          fill={object.fill.enabled ? rgbaToCss(object.fill.color) : "none"}
+        />
+        {isSelected && (
+          <circle
+            cx={toScreenX(object.cx)}
+            cy={toScreenY(object.cy)}
+            r={object.radius * Math.abs(toScreenX(1) - toScreenX(0)) + 5}
+            fill="none"
+            stroke="#ff9800"
+            strokeWidth={1.5}
+            strokeDasharray="4 4"
+          />
+        )}
+      </g>
+    );
+  }
+
+  if (object.type === "ellipse2d") {
+    return (
+      <g
+        onClick={() => onSelect(object.id)}
+        onPointerDown={(e) => onPointerDown(e, object.id, "move")}
+        style={{ cursor: "pointer" }}
+      >
+        <ellipse
+          cx={toScreenX(object.cx)}
+          cy={toScreenY(object.cy)}
+          rx={object.rx * Math.abs(toScreenX(1) - toScreenX(0))}
+          ry={object.ry * Math.abs(toScreenY(1) - toScreenY(0))}
+          stroke={rgbaToCss(object.stroke.color)}
+          strokeWidth={object.stroke.width}
+          fill={object.fill.enabled ? rgbaToCss(object.fill.color) : "none"}
+        />
+        {isSelected && (
+          <ellipse
+            cx={toScreenX(object.cx)}
+            cy={toScreenY(object.cy)}
+            rx={object.rx * Math.abs(toScreenX(1) - toScreenX(0)) + 5}
+            ry={object.ry * Math.abs(toScreenY(1) - toScreenY(0)) + 5}
+            fill="none"
+            stroke="#ff9800"
+            strokeWidth={1.5}
+            strokeDasharray="4 4"
+          />
+        )}
+      </g>
+    );
+  }
+
+  if (object.type === "polygon2d") {
+    const d = buildPolygonPath(object, toScreenX, toScreenY);
+
+    return (
+      <g
+        onClick={() => onSelect(object.id)}
+        onPointerDown={(e) => onPointerDown(e, object.id, "move")}
+        style={{ cursor: "pointer" }}
+      >
+        <path
+          d={d}
+          stroke={rgbaToCss(object.stroke.color)}
+          strokeWidth={object.stroke.width}
+          fill={object.fill.enabled ? rgbaToCss(object.fill.color) : "none"}
+        />
+        {isSelected && (
+          <path
+            d={d}
+            stroke="#ff9800"
+            strokeWidth={object.stroke.width + 3}
+            fill="none"
+            strokeOpacity={0.35}
+          />
         )}
       </g>
     );
@@ -237,7 +366,6 @@ export function ObjectRenderer({
           overflow="visible"
         >
           <div
-            xmlns="http://www.w3.org/1999/xhtml"
             style={{
               color: rgbaToCss(object.textStyle.color),
               fontSize: `${fontPx}px`,

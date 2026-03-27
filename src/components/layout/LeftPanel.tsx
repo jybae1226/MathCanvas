@@ -1,11 +1,62 @@
+import { useEffect, useState } from "react";
 import { useProjectStore } from "../../store/projectStore";
+
+function NumberInput({
+  value,
+  onCommit,
+  step = "any",
+}: {
+  value: number;
+  onCommit: (value: number) => void;
+  step?: string;
+}) {
+  const [text, setText] = useState(String(value));
+
+  useEffect(() => {
+    setText(String(value));
+  }, [value]);
+
+  const commit = () => {
+    if (text.trim() === "" || text.trim() === "-") {
+      onCommit(0);
+      return;
+    }
+
+    const parsed = Number(text);
+    if (Number.isFinite(parsed)) {
+      onCommit(parsed);
+    } else {
+      setText(String(value));
+    }
+  };
+
+  return (
+    <input
+      type="text"
+      inputMode="decimal"
+      step={step}
+      value={text}
+      onChange={(e) => setText(e.target.value)}
+      onBlur={commit}
+      onKeyDown={(e) => {
+        if (e.key === "Enter") {
+          commit();
+        }
+      }}
+    />
+  );
+}
 
 export function LeftPanel() {
   const addPoint = useProjectStore((s) => s.addPoint);
+  const addCircle = useProjectStore((s) => s.addCircle);
+  const addEllipse = useProjectStore((s) => s.addEllipse);
+  const addPolygon = useProjectStore((s) => s.addPolygon);
   const startLineTool = useProjectStore((s) => s.startLineTool);
   const addFunction = useProjectStore((s) => s.addFunction);
   const addText = useProjectStore((s) => s.addText);
   const addFormula = useProjectStore((s) => s.addFormula);
+  const addRegionFill = useProjectStore((s) => s.addRegionFill);
 
   const objects = useProjectStore((s) => s.objects);
   const selectedObjectId = useProjectStore((s) => s.selectedObjectId);
@@ -17,10 +68,24 @@ export function LeftPanel() {
   const activeTool = useProjectStore((s) => s.activeTool);
   const lineDraftStart = useProjectStore((s) => s.lineDraftStart);
 
+  const curveCandidates = objects.filter(
+    (obj) => obj.type === "function2d" || obj.type === "line2d",
+  );
+
+  const [curveAId, setCurveAId] = useState("");
+  const [curveBId, setCurveBId] = useState("");
+  const [regionXStart, setRegionXStart] = useState(scene.xRange[0]);
+  const [regionXEnd, setRegionXEnd] = useState(scene.xRange[1]);
+
+  useEffect(() => {
+    if (!curveAId && curveCandidates[0]) setCurveAId(curveCandidates[0].id);
+    if (!curveBId && curveCandidates[1]) setCurveBId(curveCandidates[1].id);
+  }, [curveCandidates, curveAId, curveBId]);
+
   return (
     <aside
       style={{
-        width: 300,
+        width: 340,
         borderRight: "1px solid #ddd",
         padding: 16,
         background: "#fff",
@@ -35,6 +100,9 @@ export function LeftPanel() {
           <button onClick={startLineTool}>
             + Line (캔버스에서 2점 클릭)
           </button>
+          <button onClick={addCircle}>+ Circle</button>
+          <button onClick={addEllipse}>+ Ellipse</button>
+          <button onClick={addPolygon}>+ Polygon</button>
           <button onClick={addFunction}>+ Function</button>
           <button onClick={addText}>+ Text</button>
           <button onClick={addFormula}>+ Formula</button>
@@ -50,8 +118,65 @@ export function LeftPanel() {
           <div style={{ marginTop: 8 }}>
             Zoom: 마우스 휠
             <br />
-            Pan: Alt + 드래그 또는 가운데 버튼 드래그
+            Pan: 빈 공간 드래그
           </div>
+        </div>
+      </section>
+
+      <section style={{ marginTop: 24 }}>
+        <h3>Region Fill</h3>
+
+        <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
+          <div>
+            <label style={{ display: "block", marginBottom: 6 }}>Curve A</label>
+            <select
+              value={curveAId}
+              onChange={(e) => setCurveAId(e.target.value)}
+              style={{ width: "100%", padding: "8px 10px" }}
+            >
+              <option value="">선택</option>
+              {curveCandidates.map((obj) => (
+                <option key={obj.id} value={obj.id}>
+                  {obj.name} · {obj.type}
+                </option>
+              ))}
+            </select>
+          </div>
+
+          <div>
+            <label style={{ display: "block", marginBottom: 6 }}>Curve B</label>
+            <select
+              value={curveBId}
+              onChange={(e) => setCurveBId(e.target.value)}
+              style={{ width: "100%", padding: "8px 10px" }}
+            >
+              <option value="">선택</option>
+              {curveCandidates.map((obj) => (
+                <option key={obj.id} value={obj.id}>
+                  {obj.name} · {obj.type}
+                </option>
+              ))}
+            </select>
+          </div>
+
+          <div>
+            <label style={{ display: "block", marginBottom: 6 }}>X Start</label>
+            <NumberInput value={regionXStart} onCommit={setRegionXStart} />
+          </div>
+
+          <div>
+            <label style={{ display: "block", marginBottom: 6 }}>X End</label>
+            <NumberInput value={regionXEnd} onCommit={setRegionXEnd} />
+          </div>
+
+          <button
+            onClick={() => {
+              if (!curveAId || !curveBId || curveAId === curveBId) return;
+              addRegionFill(curveAId, curveBId, regionXStart, regionXEnd);
+            }}
+          >
+            + Create Region Fill
+          </button>
         </div>
       </section>
 
@@ -59,28 +184,29 @@ export function LeftPanel() {
         <h3>Scene</h3>
 
         <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
+          <label style={{ display: "flex", alignItems: "center", gap: 8 }}>
+            <input
+              type="checkbox"
+              checked={scene.snapToGrid}
+              onChange={(e) => updateScene({ snapToGrid: e.target.checked })}
+            />
+            Snap to Grid
+          </label>
+
           <div>
             <label style={{ display: "block", marginBottom: 6 }}>X Range</label>
             <div style={{ display: "flex", gap: 8 }}>
-              <input
-                type="number"
+              <NumberInput
                 value={scene.xRange[0]}
-                onChange={(e) => {
-                  const next = Number(e.target.value);
-                  if (Number.isFinite(next)) {
-                    updateScene({ xRange: [next, scene.xRange[1]] });
-                  }
-                }}
+                onCommit={(next) =>
+                  updateScene({ xRange: [next, scene.xRange[1]] })
+                }
               />
-              <input
-                type="number"
+              <NumberInput
                 value={scene.xRange[1]}
-                onChange={(e) => {
-                  const next = Number(e.target.value);
-                  if (Number.isFinite(next)) {
-                    updateScene({ xRange: [scene.xRange[0], next] });
-                  }
-                }}
+                onCommit={(next) =>
+                  updateScene({ xRange: [scene.xRange[0], next] })
+                }
               />
             </div>
           </div>
@@ -88,56 +214,38 @@ export function LeftPanel() {
           <div>
             <label style={{ display: "block", marginBottom: 6 }}>Y Range</label>
             <div style={{ display: "flex", gap: 8 }}>
-              <input
-                type="number"
+              <NumberInput
                 value={scene.yRange[0]}
-                onChange={(e) => {
-                  const next = Number(e.target.value);
-                  if (Number.isFinite(next)) {
-                    updateScene({ yRange: [next, scene.yRange[1]] });
-                  }
-                }}
+                onCommit={(next) =>
+                  updateScene({ yRange: [next, scene.yRange[1]] })
+                }
               />
-              <input
-                type="number"
+              <NumberInput
                 value={scene.yRange[1]}
-                onChange={(e) => {
-                  const next = Number(e.target.value);
-                  if (Number.isFinite(next)) {
-                    updateScene({ yRange: [scene.yRange[0], next] });
-                  }
-                }}
+                onCommit={(next) =>
+                  updateScene({ yRange: [scene.yRange[0], next] })
+                }
               />
             </div>
           </div>
 
           <div>
             <label style={{ display: "block", marginBottom: 6 }}>X Tick Step</label>
-            <input
-              type="number"
-              step="any"
+            <NumberInput
               value={scene.xTickStep}
-              onChange={(e) => {
-                const next = Number(e.target.value);
-                if (Number.isFinite(next) && next > 0) {
-                  updateScene({ xTickStep: next });
-                }
-              }}
+              onCommit={(next) =>
+                updateScene({ xTickStep: next <= 0 ? 1 : next })
+              }
             />
           </div>
 
           <div>
             <label style={{ display: "block", marginBottom: 6 }}>Y Tick Step</label>
-            <input
-              type="number"
-              step="any"
+            <NumberInput
               value={scene.yTickStep}
-              onChange={(e) => {
-                const next = Number(e.target.value);
-                if (Number.isFinite(next) && next > 0) {
-                  updateScene({ yTickStep: next });
-                }
-              }}
+              onCommit={(next) =>
+                updateScene({ yTickStep: next <= 0 ? 1 : next })
+              }
             />
           </div>
         </div>

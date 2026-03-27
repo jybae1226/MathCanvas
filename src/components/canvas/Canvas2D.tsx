@@ -31,6 +31,11 @@ function clamp(value: number, min: number, max: number): number {
   return Math.min(max, Math.max(min, value));
 }
 
+function snapValue(value: number, step: number): number {
+  if (!Number.isFinite(step) || step <= 0) return value;
+  return Math.round(value / step) * step;
+}
+
 type DragMode = null | "move" | "line-start" | "line-end" | "pan";
 
 export function Canvas2D() {
@@ -70,6 +75,7 @@ export function Canvas2D() {
     yTickStep,
     showAxes,
     showGrid,
+    snapToGrid,
   } = scene;
 
   const xSpan = xRange[1] - xRange[0];
@@ -170,6 +176,9 @@ export function Canvas2D() {
       </text>
     ));
 
+  const regionObjects = objects.filter((obj) => obj.type === "region2d");
+  const otherObjects = objects.filter((obj) => obj.type !== "region2d");
+
   return (
     <div className="canvas-wrap">
       <svg
@@ -181,25 +190,37 @@ export function Canvas2D() {
         className="canvas-svg"
         onContextMenu={(e) => e.preventDefault()}
         onClick={(e) => {
+          const target = e.target as HTMLElement;
+          const isBackground = target.dataset.role === "background";
+
           const rect = e.currentTarget.getBoundingClientRect();
           const sx = e.clientX - rect.left;
           const sy = e.clientY - rect.top;
-          const wx = toWorldXFromSvg(sx);
-          const wy = toWorldYFromSvg(sy);
 
-          if (activeTool === "line") {
+          let wx = toWorldXFromSvg(sx);
+          let wy = toWorldYFromSvg(sy);
+
+          if (snapToGrid) {
+            wx = snapValue(wx, xTickStep);
+            wy = snapValue(wy, yTickStep);
+          }
+
+          if (activeTool === "line" && isBackground) {
             handleCanvasWorldClick(wx, wy);
             return;
           }
 
-          if (e.target === e.currentTarget) {
+          if (isBackground) {
             selectObject(null);
           }
         }}
         onPointerDown={(e) => {
-          if (e.target !== e.currentTarget) return;
+          const target = e.target as HTMLElement;
+          const isBackground = target.dataset.role === "background";
 
-          if (e.altKey || e.button === 1) {
+          if (!isBackground) return;
+
+          if (activeTool === "select") {
             beginInteractionHistory();
             dragRef.current.mode = "pan";
             dragRef.current.objectId = null;
@@ -217,10 +238,16 @@ export function Canvas2D() {
           dragRef.current.lastClientX = e.clientX;
           dragRef.current.lastClientY = e.clientY;
 
-          if (mode === "pan") {
-            const dx = screenDxToWorld(dxPixels);
-            const dy = screenDyToWorld(dyPixels);
+          let dx = screenDxToWorld(dxPixels);
+          let dy = screenDyToWorld(dyPixels);
 
+          if (snapToGrid && mode !== "pan") {
+            dx = snapValue(dx, xTickStep);
+            dy = snapValue(dy, yTickStep);
+            if (dx === 0 && dy === 0) return;
+          }
+
+          if (mode === "pan") {
             updateSceneDirect({
               xRange: [xRange[0] - dx, xRange[1] - dx],
               yRange: [yRange[0] - dy, yRange[1] - dy],
@@ -232,31 +259,17 @@ export function Canvas2D() {
           if (!currentId) return;
 
           if (mode === "move") {
-            moveObjectBy(
-              currentId,
-              screenDxToWorld(dxPixels),
-              screenDyToWorld(dyPixels),
-            );
+            moveObjectBy(currentId, dx, dy);
             return;
           }
 
           if (mode === "line-start") {
-            moveLineEndpointBy(
-              currentId,
-              "start",
-              screenDxToWorld(dxPixels),
-              screenDyToWorld(dyPixels),
-            );
+            moveLineEndpointBy(currentId, "start", dx, dy);
             return;
           }
 
           if (mode === "line-end") {
-            moveLineEndpointBy(
-              currentId,
-              "end",
-              screenDxToWorld(dxPixels),
-              screenDyToWorld(dyPixels),
-            );
+            moveLineEndpointBy(currentId, "end", dx, dy);
           }
         }}
         onPointerUp={() => {
@@ -291,7 +304,14 @@ export function Canvas2D() {
           });
         }}
       >
-        <rect x={0} y={0} width={width} height={height} fill="white" />
+        <rect
+          data-role="background"
+          x={0}
+          y={0}
+          width={width}
+          height={height}
+          fill="white"
+        />
 
         {showGrid && (
           <>
@@ -323,6 +343,29 @@ export function Canvas2D() {
                 strokeWidth={1.5}
               />
             )}
+
+            {axisY >= offsetY && axisY <= offsetY + usedHeight && (
+              <text
+                x={offsetX + usedWidth - 12}
+                y={axisY - 8}
+                fontSize={14}
+                fill="#444"
+                textAnchor="end"
+              >
+                x
+              </text>
+            )}
+
+            {axisX >= offsetX && axisX <= offsetX + usedWidth && (
+              <text
+                x={axisX + 10}
+                y={offsetY + 16}
+                fontSize={14}
+                fill="#444"
+              >
+                y
+              </text>
+            )}
           </>
         )}
 
@@ -344,10 +387,11 @@ export function Canvas2D() {
           />
         )}
 
-        {objects.map((object) => (
+        {regionObjects.map((object) => (
           <ObjectRenderer
             key={object.id}
             object={object}
+            allObjects={objects}
             isSelected={selectedObjectId === object.id}
             toScreenX={toScreenX}
             toScreenY={toScreenY}
@@ -356,7 +400,30 @@ export function Canvas2D() {
             onSelect={selectObject}
             onPointerDown={(e, id, target) => {
               if (activeTool !== "select") return;
+              e.stopPropagation();
+              beginInteractionHistory();
+              dragRef.current.objectId = id;
+              dragRef.current.mode = target;
+              dragRef.current.lastClientX = e.clientX;
+              dragRef.current.lastClientY = e.clientY;
+              selectObject(id);
+            }}
+          />
+        ))}
 
+        {otherObjects.map((object) => (
+          <ObjectRenderer
+            key={object.id}
+            object={object}
+            allObjects={objects}
+            isSelected={selectedObjectId === object.id}
+            toScreenX={toScreenX}
+            toScreenY={toScreenY}
+            currentXRange={xRange}
+            viewHeight={height}
+            onSelect={selectObject}
+            onPointerDown={(e, id, target) => {
+              if (activeTool !== "select") return;
               e.stopPropagation();
               beginInteractionHistory();
               dragRef.current.objectId = id;

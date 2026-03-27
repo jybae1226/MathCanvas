@@ -1,6 +1,50 @@
-import { useMemo } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useProjectStore } from "../../store/projectStore";
+import { approximateRegionArea, polygonArea, polygonPerimeter } from "../../utils/graph";
 import { rgbaToHex } from "../../types/styles";
+
+function NumberInput({
+  value,
+  onCommit,
+}: {
+  value: number;
+  onCommit: (value: number) => void;
+}) {
+  const [text, setText] = useState(String(value));
+
+  useEffect(() => {
+    setText(String(value));
+  }, [value]);
+
+  const commit = () => {
+    if (text.trim() === "" || text.trim() === "-") {
+      onCommit(0);
+      return;
+    }
+
+    const parsed = Number(text);
+    if (Number.isFinite(parsed)) {
+      onCommit(parsed);
+    } else {
+      setText(String(value));
+    }
+  };
+
+  return (
+    <input
+      type="text"
+      inputMode="decimal"
+      value={text}
+      onChange={(e) => setText(e.target.value)}
+      onBlur={commit}
+      onKeyDown={(e) => {
+        if (e.key === "Enter") {
+          commit();
+        }
+      }}
+    />
+  );
+}
 
 export function RightPanel() {
   const objects = useProjectStore((s) => s.objects);
@@ -20,6 +64,14 @@ export function RightPanel() {
   );
   const updateFunctionDomain = useProjectStore((s) => s.updateFunctionDomain);
 
+  const updatePointLabel = useProjectStore((s) => s.updatePointLabel);
+  const updatePointFilled = useProjectStore((s) => s.updatePointFilled);
+
+  const updateRegionFillColor = useProjectStore((s) => s.updateRegionFillColor);
+  const updateRegionOpacity = useProjectStore((s) => s.updateRegionOpacity);
+  const updateRegionXStart = useProjectStore((s) => s.updateRegionXStart);
+  const updateRegionXEnd = useProjectStore((s) => s.updateRegionXEnd);
+
   const deleteSelectedObject = useProjectStore((s) => s.deleteSelectedObject);
 
   const selected = useMemo(
@@ -27,10 +79,63 @@ export function RightPanel() {
     [objects, selectedObjectId],
   );
 
+  const selectedMeasurement = useMemo(() => {
+    if (!selected) return null;
+
+    if (selected.type === "line2d") {
+      return {
+        label: "Length",
+        value: Math.hypot(selected.x2 - selected.x1, selected.y2 - selected.y1),
+      };
+    }
+
+    if (selected.type === "circle2d") {
+      return {
+        label: "Area / Circumference",
+        value: `${(Math.PI * selected.radius * selected.radius).toFixed(4)} / ${(2 * Math.PI * selected.radius).toFixed(4)}`,
+      };
+    }
+
+    if (selected.type === "ellipse2d") {
+      const area = Math.PI * selected.rx * selected.ry;
+      return {
+        label: "Area",
+        value: area.toFixed(4),
+      };
+    }
+
+    if (selected.type === "polygon2d") {
+      return {
+        label: "Area / Perimeter",
+        value: `${polygonArea(selected.points).toFixed(4)} / ${polygonPerimeter(selected.points).toFixed(4)}`,
+      };
+    }
+
+    if (selected.type === "region2d") {
+      const curveA = objects.find((obj) => obj.id === selected.curveAId);
+      const curveB = objects.find((obj) => obj.id === selected.curveBId);
+
+      if (!curveA || !curveB) return null;
+
+      return {
+        label: "Approx. Area",
+        value: approximateRegionArea(
+          curveA,
+          curveB,
+          selected.xStart,
+          selected.xEnd,
+          selected.samples,
+        ).toFixed(4),
+      };
+    }
+
+    return null;
+  }, [selected, objects]);
+
   return (
     <aside
       style={{
-        width: 320,
+        width: 360,
         borderLeft: "1px solid #ddd",
         padding: 16,
         background: "#fff",
@@ -52,6 +157,48 @@ export function RightPanel() {
             <label>Type</label>
             <div>{selected.type}</div>
           </div>
+
+          {selectedMeasurement && (
+            <div
+              style={{
+                padding: "10px 12px",
+                background: "#f8fafc",
+                border: "1px solid #e2e8f0",
+                borderRadius: 8,
+              }}
+            >
+              <strong>{selectedMeasurement.label}:</strong>{" "}
+              {typeof selectedMeasurement.value === "number"
+                ? selectedMeasurement.value.toFixed(4)
+                : selectedMeasurement.value}
+            </div>
+          )}
+
+          {selected.type === "point2d" && (
+            <>
+              <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
+                <label>Point Name</label>
+                <input
+                  type="text"
+                  value={selected.label ?? ""}
+                  onChange={(e) =>
+                    updatePointLabel(selected.id, e.target.value)
+                  }
+                />
+              </div>
+
+              <label style={{ display: "flex", alignItems: "center", gap: 8 }}>
+                <input
+                  type="checkbox"
+                  checked={selected.fill.enabled}
+                  onChange={(e) =>
+                    updatePointFilled(selected.id, e.target.checked)
+                  }
+                />
+                Filled Circle
+              </label>
+            </>
+          )}
 
           {"stroke" in selected && (
             <>
@@ -124,33 +271,23 @@ export function RightPanel() {
                 <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
                   <label>Custom Domain</label>
                   <div style={{ display: "flex", gap: 8 }}>
-                    <input
-                      type="number"
-                      step="any"
+                    <NumberInput
                       value={selected.domain[0]}
-                      onChange={(e) => {
-                        const next = Number(e.target.value);
-                        if (Number.isFinite(next)) {
-                          updateFunctionDomain(selected.id, [
-                            next,
-                            selected.domain![1],
-                          ]);
-                        }
-                      }}
+                      onCommit={(next) =>
+                        updateFunctionDomain(selected.id, [
+                          next,
+                          selected.domain![1],
+                        ])
+                      }
                     />
-                    <input
-                      type="number"
-                      step="any"
+                    <NumberInput
                       value={selected.domain[1]}
-                      onChange={(e) => {
-                        const next = Number(e.target.value);
-                        if (Number.isFinite(next)) {
-                          updateFunctionDomain(selected.id, [
-                            selected.domain![0],
-                            next,
-                          ]);
-                        }
-                      }}
+                      onCommit={(next) =>
+                        updateFunctionDomain(selected.id, [
+                          selected.domain![0],
+                          next,
+                        ])
+                      }
                     />
                   </div>
                 </div>
@@ -249,6 +386,59 @@ export function RightPanel() {
                   onChange={(e) =>
                     updateTextSize(selected.id, Number(e.target.value))
                   }
+                />
+              </div>
+            </>
+          )}
+
+          {selected.type === "region2d" && (
+            <>
+              <div
+                style={{ display: "flex", justifyContent: "space-between" }}
+              >
+                <label>Fill Color</label>
+                <input
+                  type="color"
+                  value={rgbaToHex(selected.fill.color)}
+                  onChange={(e) =>
+                    updateRegionFillColor(selected.id, e.target.value)
+                  }
+                />
+              </div>
+
+              <div
+                style={{
+                  display: "flex",
+                  justifyContent: "space-between",
+                  gap: 12,
+                }}
+              >
+                <label>Opacity</label>
+                <input
+                  type="range"
+                  min={0}
+                  max={1}
+                  step={0.01}
+                  value={selected.fill.color.a}
+                  onChange={(e) =>
+                    updateRegionOpacity(selected.id, Number(e.target.value))
+                  }
+                />
+              </div>
+
+              <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
+                <label>X Start</label>
+                <NumberInput
+                  value={selected.xStart}
+                  onCommit={(next) => updateRegionXStart(selected.id, next)}
+                />
+              </div>
+
+              <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
+                <label>X End</label>
+                <NumberInput
+                  value={selected.xEnd}
+                  onCommit={(next) => updateRegionXEnd(selected.id, next)}
                 />
               </div>
             </>
