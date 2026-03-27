@@ -1,6 +1,7 @@
 import { useMemo, useRef } from "react";
 import { useProjectStore } from "../../store/projectStore";
 import { ObjectRenderer } from "./ObjectRenderer";
+import { approximateCurveIntersections } from "../../utils/graph";
 
 function makeTicks(min: number, max: number, step: number): number[] {
   if (!Number.isFinite(step) || step <= 0) return [];
@@ -198,6 +199,36 @@ export function Canvas2D() {
 
   const regionObjects = objects.filter((obj) => obj.type === "region2d");
   const otherObjects = objects.filter((obj) => obj.type !== "region2d");
+
+  const curveObjects = objects.filter(
+    (obj) => obj.type === "function2d" || obj.type === "line2d",
+  );
+
+  const intersectionPoints = useMemo(() => {
+    const result: Array<{ x: number; y: number }> = [];
+
+    for (let i = 0; i < curveObjects.length; i += 1) {
+      for (let j = i + 1; j < curveObjects.length; j += 1) {
+        const pts = approximateCurveIntersections(
+          curveObjects[i],
+          curveObjects[j],
+          xRange,
+          1200,
+        );
+        result.push(...pts);
+      }
+    }
+
+    const unique: Array<{ x: number; y: number }> = [];
+    for (const p of result) {
+      const exists = unique.some(
+        (q) => Math.abs(q.x - p.x) < 1e-3 && Math.abs(q.y - p.y) < 1e-3,
+      );
+      if (!exists) unique.push(p);
+    }
+
+    return unique;
+  }, [curveObjects, xRange]);
 
   return (
     <div className="canvas-wrap">
@@ -486,6 +517,27 @@ export function Canvas2D() {
             ))}
           </>
         )}
+
+        {intersectionPoints.map((p, idx) => (
+          <g key={`intersection-${idx}`}>
+            <circle
+              cx={toScreenX(p.x)}
+              cy={toScreenY(p.y)}
+              r={4}
+              fill="#d32f2f"
+              stroke="#ffffff"
+              strokeWidth={1.5}
+            />
+            <text
+              x={toScreenX(p.x) + 6}
+              y={toScreenY(p.y) - 6}
+              fontSize={11}
+              fill="#b91c1c"
+            >
+              ({p.x.toFixed(2)}, {p.y.toFixed(2)})
+            </text>
+          </g>
+        ))}
 
         {regionObjects.map((object) => (
           <ObjectRenderer

@@ -92,7 +92,6 @@ function implicitValue(expression: string, x: number, y: number): number | null 
   try {
     const compiled = compile(parseImplicitExpression(expression));
     const result = compiled.evaluate({ x, y });
-
     return typeof result === "number" && Number.isFinite(result) ? result : null;
   } catch {
     return null;

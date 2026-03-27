@@ -105,6 +105,7 @@ export function RightPanel() {
   const updateRegionLabelColor = useProjectStore((s) => s.updateRegionLabelColor);
   const updateRegionLabelSize = useProjectStore((s) => s.updateRegionLabelSize);
 
+  const updateObject = useProjectStore((s) => s.updateObject);
   const deleteSelectedObject = useProjectStore((s) => s.deleteSelectedObject);
 
   const selected = useMemo(
@@ -405,6 +406,65 @@ export function RightPanel() {
                     updateShapeFillColor(selected.id, e.target.value)
                   }
                 />
+              </div>
+
+              <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+                <label>Vertices</label>
+                {selected.points.map((p, index) => (
+                  <div
+                    key={index}
+                    style={{
+                      display: "flex",
+                      gap: 8,
+                      alignItems: "center",
+                    }}
+                  >
+                    <div style={{ flex: 1 }}>
+                      <NumberInput
+                        value={p.x}
+                        onCommit={(next) => {
+                          const nextPoints = selected.points.map((pt, i) =>
+                            i === index ? { ...pt, x: next } : pt,
+                          );
+                          updateObject(selected.id, { points: nextPoints } as any);
+                        }}
+                      />
+                    </div>
+                    <div style={{ flex: 1 }}>
+                      <NumberInput
+                        value={p.y}
+                        onCommit={(next) => {
+                          const nextPoints = selected.points.map((pt, i) =>
+                            i === index ? { ...pt, y: next } : pt,
+                          );
+                          updateObject(selected.id, { points: nextPoints } as any);
+                        }}
+                      />
+                    </div>
+                    <button
+                      onClick={() => {
+                        if (selected.points.length <= 3) return;
+                        const nextPoints = selected.points.filter((_, i) => i !== index);
+                        updateObject(selected.id, { points: nextPoints } as any);
+                      }}
+                    >
+                      -
+                    </button>
+                  </div>
+                ))}
+
+                <button
+                  onClick={() => {
+                    const last = selected.points[selected.points.length - 1];
+                    const nextPoints = [
+                      ...selected.points,
+                      { x: last.x + 1, y: last.y + 1 },
+                    ];
+                    updateObject(selected.id, { points: nextPoints } as any);
+                  }}
+                >
+                  + Add Vertex
+                </button>
               </div>
             </>
           )}
