@@ -79,10 +79,119 @@ export const buildFunctionPath = (
   return commands.join(" ");
 };
 
+function parseImplicitExpression(expression: string): string {
+  if (expression.includes("=")) {
+    const [left, right] = expression.split("=");
+    return `(${left}) - (${right})`;
+  }
+
+  return expression;
+}
+
+function implicitValue(expression: string, x: number, y: number): number | null {
+  try {
+    const compiled = compile(parseImplicitExpression(expression));
+    const result = compiled.evaluate({ x, y });
+
+    return typeof result === "number" && Number.isFinite(result) ? result : null;
+  } catch {
+    return null;
+  }
+}
+
+function interpolate(
+  p1: { x: number; y: number; v: number },
+  p2: { x: number; y: number; v: number },
+) {
+  const dv = p2.v - p1.v;
+  if (Math.abs(dv) < 1e-12) {
+    return { x: (p1.x + p2.x) / 2, y: (p1.y + p2.y) / 2 };
+  }
+  const t = -p1.v / dv;
+  return {
+    x: p1.x + (p2.x - p1.x) * t,
+    y: p1.y + (p2.y - p1.y) * t,
+  };
+}
+
+export function buildImplicitPath(
+  expression: string,
+  xRange: [number, number],
+  yRange: [number, number],
+  resolutionX: number,
+  resolutionY: number,
+  toScreenX: (x: number) => number,
+  toScreenY: (y: number) => number,
+): string {
+  const [xMin, xMax] = xRange;
+  const [yMin, yMax] = yRange;
+  const dx = (xMax - xMin) / resolutionX;
+  const dy = (yMax - yMin) / resolutionY;
+  const segments: string[] = [];
+
+  for (let i = 0; i < resolutionX; i += 1) {
+    for (let j = 0; j < resolutionY; j += 1) {
+      const x0 = xMin + i * dx;
+      const x1 = x0 + dx;
+      const y0 = yMin + j * dy;
+      const y1 = y0 + dy;
+
+      const p00 = { x: x0, y: y0, v: implicitValue(expression, x0, y0) };
+      const p10 = { x: x1, y: y0, v: implicitValue(expression, x1, y0) };
+      const p11 = { x: x1, y: y1, v: implicitValue(expression, x1, y1) };
+      const p01 = { x: x0, y: y1, v: implicitValue(expression, x0, y1) };
+
+      if ([p00.v, p10.v, p11.v, p01.v].some((v) => v === null)) continue;
+
+      const corners = [p00, p10, p11, p01] as Array<{
+        x: number;
+        y: number;
+        v: number | null;
+      }>;
+
+      const edges: Array<{ x: number; y: number }> = [];
+
+      const edgePairs: Array<[number, number]> = [
+        [0, 1],
+        [1, 2],
+        [2, 3],
+        [3, 0],
+      ];
+
+      for (const [aIdx, bIdx] of edgePairs) {
+        const a = corners[aIdx];
+        const b = corners[bIdx];
+        if (a.v === null || b.v === null) continue;
+
+        if ((a.v <= 0 && b.v >= 0) || (a.v >= 0 && b.v <= 0)) {
+          edges.push(interpolate(a as any, b as any));
+        }
+      }
+
+      if (edges.length === 2) {
+        segments.push(
+          `M ${toScreenX(edges[0].x)} ${toScreenY(edges[0].y)} L ${toScreenX(edges[1].x)} ${toScreenY(edges[1].y)}`,
+        );
+      } else if (edges.length === 4) {
+        segments.push(
+          `M ${toScreenX(edges[0].x)} ${toScreenY(edges[0].y)} L ${toScreenX(edges[1].x)} ${toScreenY(edges[1].y)}`,
+        );
+        segments.push(
+          `M ${toScreenX(edges[2].x)} ${toScreenY(edges[2].y)} L ${toScreenX(edges[3].x)} ${toScreenY(edges[3].y)}`,
+        );
+      }
+    }
+  }
+
+  return segments.join(" ");
+}
+
 function evaluateFunctionY(
   obj: Function2DObject,
   x: number,
 ): number | null {
+  if (obj.expression.includes("=")) return null;
+
   if (obj.domain && (x < obj.domain[0] || x > obj.domain[1])) {
     return null;
   }
@@ -253,4 +362,63 @@ export function polygonPerimeter(
   }
 
   return total;
+}
+
+export function approximateCurveIntersections(
+  a: SceneObject,
+  b: SceneObject,
+  xRange: [number, number],
+  samples = 1000,
+): Array<{ x: number; y: number }> {
+  const points: Array<{ x: number; y: number }> = [];
+  const [xMin, xMax] = xRange;
+  const dx = (xMax - xMin) / samples;
+
+  let prevX = xMin;
+  let prevYA = evaluateCurveY(a, prevX);
+  let prevYB = evaluateCurveY(b, prevX);
+
+  for (let i = 1; i <= samples; i += 1) {
+    const x = xMin + i * dx;
+    const yA = evaluateCurveY(a, x);
+    const yB = evaluateCurveY(b, x);
+
+    if (
+      prevYA !== null &&
+      prevYB !== null &&
+      yA !== null &&
+      yB !== null
+    ) {
+      const d0 = prevYA - prevYB;
+      const d1 = yA - yB;
+
+      if (d0 === 0) {
+        points.push({ x: prevX, y: prevYA });
+      } else if (d0 * d1 < 0) {
+        const t = Math.abs(d0) / (Math.abs(d0) + Math.abs(d1));
+        const xr = prevX + (x - prevX) * t;
+        const yrA = evaluateCurveY(a, xr);
+        const yrB = evaluateCurveY(b, xr);
+
+        if (yrA !== null && yrB !== null) {
+          points.push({ x: xr, y: (yrA + yrB) / 2 });
+        }
+      }
+    }
+
+    prevX = x;
+    prevYA = yA;
+    prevYB = yB;
+  }
+
+  const unique: Array<{ x: number; y: number }> = [];
+
+  for (const p of points) {
+    const exists = unique.some(
+      (q) => Math.abs(q.x - p.x) < 1e-3 && Math.abs(q.y - p.y) < 1e-3,
+    );
+    if (!exists) unique.push(p);
+  }
+
+  return unique;
 }

@@ -7,6 +7,16 @@ export type BaseObject = {
   locked: boolean;
 };
 
+export type LabelPosition =
+  | "top"
+  | "bottom"
+  | "left"
+  | "right"
+  | "top-right"
+  | "top-left"
+  | "bottom-right"
+  | "bottom-left";
+
 export type Point2DObject = BaseObject & {
   type: "point2d";
   x: number;
@@ -15,6 +25,8 @@ export type Point2DObject = BaseObject & {
   stroke: StrokeStyle;
   fill: FillStyle;
   label?: string;
+  showLabel: boolean;
+  labelPosition: LabelPosition;
 };
 
 export type Line2DObject = BaseObject & {
@@ -24,6 +36,7 @@ export type Line2DObject = BaseObject & {
   x2: number;
   y2: number;
   stroke: StrokeStyle;
+  arrowEnd: boolean;
 };
 
 export type Circle2DObject = BaseObject & {
@@ -33,16 +46,7 @@ export type Circle2DObject = BaseObject & {
   radius: number;
   stroke: StrokeStyle;
   fill: FillStyle;
-};
-
-export type Ellipse2DObject = BaseObject & {
-  type: "ellipse2d";
-  cx: number;
-  cy: number;
-  rx: number;
-  ry: number;
-  stroke: StrokeStyle;
-  fill: FillStyle;
+  showCenter: boolean;
 };
 
 export type Polygon2DObject = BaseObject & {
@@ -84,13 +88,16 @@ export type Region2DObject = BaseObject & {
   xEnd: number;
   samples: number;
   fill: FillStyle;
+  labelText: string;
+  labelX: number;
+  labelY: number;
+  labelStyle: TextStyle;
 };
 
 export type SceneObject =
   | Point2DObject
   | Line2DObject
   | Circle2DObject
-  | Ellipse2DObject
   | Polygon2DObject
   | Function2DObject
   | Text2DObject
@@ -101,6 +108,7 @@ export type ProjectScene = {
   mode: "2d";
   width: number;
   height: number;
+  captionHeight: number;
   xRange: [number, number];
   yRange: [number, number];
   xTickStep: number;
@@ -108,6 +116,9 @@ export type ProjectScene = {
   showGrid: boolean;
   showAxes: boolean;
   snapToGrid: boolean;
+  captionText: string;
+  captionFontSize: number;
+  captionColor: string;
 };
 
 export type ProjectState = {

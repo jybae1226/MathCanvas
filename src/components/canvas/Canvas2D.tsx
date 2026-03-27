@@ -51,6 +51,7 @@ export function Canvas2D() {
   const endInteractionHistory = useProjectStore((s) => s.endInteractionHistory);
   const activeTool = useProjectStore((s) => s.activeTool);
   const lineDraftStart = useProjectStore((s) => s.lineDraftStart);
+  const polygonDraftPoints = useProjectStore((s) => s.polygonDraftPoints);
   const handleCanvasWorldClick = useProjectStore((s) => s.handleCanvasWorldClick);
   const updateSceneDirect = useProjectStore((s) => s.updateSceneDirect);
 
@@ -69,6 +70,10 @@ export function Canvas2D() {
   const {
     width,
     height,
+    captionHeight,
+    captionText,
+    captionFontSize,
+    captionColor,
     xRange,
     yRange,
     xTickStep,
@@ -77,6 +82,8 @@ export function Canvas2D() {
     showGrid,
     snapToGrid,
   } = scene;
+
+  const totalHeight = height + captionHeight;
 
   const xSpan = xRange[1] - xRange[0];
   const ySpan = yRange[1] - yRange[0];
@@ -147,7 +154,7 @@ export function Canvas2D() {
   const yLabelEvery = Math.max(1, Math.ceil(yTicks.length / 18));
 
   const xLabels = xTicks
-    .filter((_value, index) => index % xLabelEvery === 0)
+    .filter((value, index) => index % xLabelEvery === 0)
     .map((x) => (
       <text
         key={`xl-${x}`}
@@ -162,7 +169,7 @@ export function Canvas2D() {
     ));
 
   const yLabels = yTicks
-    .filter((_value, index) => index % yLabelEvery === 0)
+    .filter((value, index) => index % yLabelEvery === 0)
     .map((y) => (
       <text
         key={`yl-${y}`}
@@ -185,8 +192,8 @@ export function Canvas2D() {
         id="math-diagram-svg"
         xmlns="http://www.w3.org/2000/svg"
         width={width}
-        height={height}
-        viewBox={`0 0 ${width} ${height}`}
+        height={totalHeight}
+        viewBox={`0 0 ${width} ${totalHeight}`}
         className="canvas-svg"
         onContextMenu={(e) => e.preventDefault()}
         onClick={(e) => {
@@ -197,6 +204,13 @@ export function Canvas2D() {
           const sx = e.clientX - rect.left;
           const sy = e.clientY - rect.top;
 
+          if (sy > height) {
+            if (isBackground) {
+              selectObject(null);
+            }
+            return;
+          }
+
           let wx = toWorldXFromSvg(sx);
           let wy = toWorldYFromSvg(sy);
 
@@ -205,7 +219,7 @@ export function Canvas2D() {
             wy = snapValue(wy, yTickStep);
           }
 
-          if (activeTool === "line" && isBackground) {
+          if ((activeTool === "line" || activeTool === "polygon") && isBackground) {
             handleCanvasWorldClick(wx, wy);
             return;
           }
@@ -219,6 +233,7 @@ export function Canvas2D() {
           const isBackground = target.dataset.role === "background";
 
           if (!isBackground) return;
+          if (e.clientY - e.currentTarget.getBoundingClientRect().top > height) return;
 
           if (activeTool === "select") {
             beginInteractionHistory();
@@ -288,6 +303,8 @@ export function Canvas2D() {
           const rect = e.currentTarget.getBoundingClientRect();
           const sx = e.clientX - rect.left;
           const sy = e.clientY - rect.top;
+          if (sy > height) return;
+
           const wx = toWorldXFromSvg(sx);
           const wy = toWorldYFromSvg(sy);
 
@@ -304,6 +321,32 @@ export function Canvas2D() {
           });
         }}
       >
+        <defs>
+          <marker
+            id="line-arrow"
+            markerWidth="8"
+            markerHeight="8"
+            refX="7"
+            refY="4"
+            orient="auto"
+            markerUnits="strokeWidth"
+          >
+            <path d="M 0 0 L 8 4 L 0 8 z" fill="currentColor" />
+          </marker>
+
+          <marker
+            id="axis-arrow"
+            markerWidth="8"
+            markerHeight="8"
+            refX="7"
+            refY="4"
+            orient="auto"
+            markerUnits="strokeWidth"
+          >
+            <path d="M 0 0 L 8 4 L 0 8 z" fill="#666" />
+          </marker>
+        </defs>
+
         <rect
           data-role="background"
           x={0}
@@ -330,17 +373,19 @@ export function Canvas2D() {
                 y2={axisY}
                 stroke="#666"
                 strokeWidth={1.5}
+                markerEnd="url(#axis-arrow)"
               />
             )}
 
             {axisX >= offsetX && axisX <= offsetX + usedWidth && (
               <line
                 x1={axisX}
-                y1={offsetY}
+                y1={offsetY + usedHeight}
                 x2={axisX}
-                y2={offsetY + usedHeight}
+                y2={offsetY}
                 stroke="#666"
                 strokeWidth={1.5}
+                markerEnd="url(#axis-arrow)"
               />
             )}
 
@@ -387,6 +432,29 @@ export function Canvas2D() {
           />
         )}
 
+        {polygonDraftPoints.length > 0 && (
+          <>
+            <polyline
+              points={polygonDraftPoints
+                .map((p) => `${toScreenX(p.x)},${toScreenY(p.y)}`)
+                .join(" ")}
+              fill="none"
+              stroke="#ff9800"
+              strokeWidth={2}
+              strokeDasharray="6 4"
+            />
+            {polygonDraftPoints.map((p, idx) => (
+              <circle
+                key={`draft-${idx}`}
+                cx={toScreenX(p.x)}
+                cy={toScreenY(p.y)}
+                r={4}
+                fill="#ff9800"
+              />
+            ))}
+          </>
+        )}
+
         {regionObjects.map((object) => (
           <ObjectRenderer
             key={object.id}
@@ -396,6 +464,7 @@ export function Canvas2D() {
             toScreenX={toScreenX}
             toScreenY={toScreenY}
             currentXRange={xRange}
+            currentYRange={yRange}
             viewHeight={height}
             onSelect={selectObject}
             onPointerDown={(e, id, target) => {
@@ -420,6 +489,7 @@ export function Canvas2D() {
             toScreenX={toScreenX}
             toScreenY={toScreenY}
             currentXRange={xRange}
+            currentYRange={yRange}
             viewHeight={height}
             onSelect={selectObject}
             onPointerDown={(e, id, target) => {
@@ -434,6 +504,27 @@ export function Canvas2D() {
             }}
           />
         ))}
+
+        <rect
+          data-role="background"
+          x={0}
+          y={height}
+          width={width}
+          height={captionHeight}
+          fill="#ffffff"
+          stroke="#e5e7eb"
+        />
+
+        {captionText && (
+          <text
+            x={16}
+            y={height + captionHeight / 2 + captionFontSize / 3}
+            fontSize={captionFontSize}
+            fill={captionColor}
+          >
+            {captionText}
+          </text>
+        )}
       </svg>
     </div>
   );

@@ -1,7 +1,13 @@
 import { useEffect, useMemo, useState } from "react";
 import { useProjectStore } from "../../store/projectStore";
-import { approximateRegionArea, polygonArea, polygonPerimeter } from "../../utils/graph";
+import {
+  approximateCurveIntersections,
+  approximateRegionArea,
+  polygonArea,
+  polygonPerimeter,
+} from "../../utils/graph";
 import { rgbaToHex } from "../../types/styles";
+import type { LabelPosition } from "../../types/objects";
 
 function NumberInput({
   value,
@@ -46,11 +52,23 @@ function NumberInput({
   );
 }
 
+const labelPositions: LabelPosition[] = [
+  "top",
+  "bottom",
+  "left",
+  "right",
+  "top-right",
+  "top-left",
+  "bottom-right",
+  "bottom-left",
+];
+
 export function RightPanel() {
   const objects = useProjectStore((s) => s.objects);
   const selectedObjectId = useProjectStore((s) => s.selectedObjectId);
   const scene = useProjectStore((s) => s.scene);
 
+  const updateObjectName = useProjectStore((s) => s.updateObjectName);
   const updateStrokeColor = useProjectStore((s) => s.updateStrokeColor);
   const updateStrokeWidth = useProjectStore((s) => s.updateStrokeWidth);
 
@@ -66,11 +84,26 @@ export function RightPanel() {
 
   const updatePointLabel = useProjectStore((s) => s.updatePointLabel);
   const updatePointFilled = useProjectStore((s) => s.updatePointFilled);
+  const updatePointShowLabel = useProjectStore((s) => s.updatePointShowLabel);
+  const updatePointLabelPosition = useProjectStore(
+    (s) => s.updatePointLabelPosition,
+  );
+  const updatePointRadius = useProjectStore((s) => s.updatePointRadius);
+
+  const updateCircleRadius = useProjectStore((s) => s.updateCircleRadius);
+  const updateCircleShowCenter = useProjectStore((s) => s.updateCircleShowCenter);
+  const updateShapeFillEnabled = useProjectStore((s) => s.updateShapeFillEnabled);
+  const updateShapeFillColor = useProjectStore((s) => s.updateShapeFillColor);
 
   const updateRegionFillColor = useProjectStore((s) => s.updateRegionFillColor);
   const updateRegionOpacity = useProjectStore((s) => s.updateRegionOpacity);
   const updateRegionXStart = useProjectStore((s) => s.updateRegionXStart);
   const updateRegionXEnd = useProjectStore((s) => s.updateRegionXEnd);
+  const updateRegionLabelText = useProjectStore((s) => s.updateRegionLabelText);
+  const updateRegionLabelX = useProjectStore((s) => s.updateRegionLabelX);
+  const updateRegionLabelY = useProjectStore((s) => s.updateRegionLabelY);
+  const updateRegionLabelColor = useProjectStore((s) => s.updateRegionLabelColor);
+  const updateRegionLabelSize = useProjectStore((s) => s.updateRegionLabelSize);
 
   const deleteSelectedObject = useProjectStore((s) => s.deleteSelectedObject);
 
@@ -93,14 +126,6 @@ export function RightPanel() {
       return {
         label: "Area / Circumference",
         value: `${(Math.PI * selected.radius * selected.radius).toFixed(4)} / ${(2 * Math.PI * selected.radius).toFixed(4)}`,
-      };
-    }
-
-    if (selected.type === "ellipse2d") {
-      const area = Math.PI * selected.rx * selected.ry;
-      return {
-        label: "Area",
-        value: area.toFixed(4),
       };
     }
 
@@ -132,10 +157,34 @@ export function RightPanel() {
     return null;
   }, [selected, objects]);
 
+  const intersections = useMemo(() => {
+    if (!selected) return [];
+
+    if (selected.type !== "function2d" && selected.type !== "line2d") {
+      return [];
+    }
+
+    const candidates = objects.filter(
+      (obj) =>
+        obj.id !== selected.id &&
+        (obj.type === "function2d" || obj.type === "line2d"),
+    );
+
+    return candidates.flatMap((obj) =>
+      approximateCurveIntersections(selected, obj, scene.xRange, 1200).map(
+        (p) => ({
+          otherName: obj.name,
+          x: p.x,
+          y: p.y,
+        }),
+      ),
+    );
+  }, [selected, objects, scene.xRange]);
+
   return (
     <aside
       style={{
-        width: 360,
+        width: 380,
         borderLeft: "1px solid #ddd",
         padding: 16,
         background: "#fff",
@@ -148,9 +197,13 @@ export function RightPanel() {
 
       {selected && (
         <div style={{ display: "flex", flexDirection: "column", gap: 14 }}>
-          <div style={{ display: "flex", justifyContent: "space-between" }}>
+          <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
             <label>Name</label>
-            <div>{selected.name}</div>
+            <input
+              type="text"
+              value={selected.name}
+              onChange={(e) => updateObjectName(selected.id, e.target.value)}
+            />
           </div>
 
           <div style={{ display: "flex", justifyContent: "space-between" }}>
@@ -190,6 +243,36 @@ export function RightPanel() {
               <label style={{ display: "flex", alignItems: "center", gap: 8 }}>
                 <input
                   type="checkbox"
+                  checked={selected.showLabel}
+                  onChange={(e) =>
+                    updatePointShowLabel(selected.id, e.target.checked)
+                  }
+                />
+                Show Label
+              </label>
+
+              <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
+                <label>Label Position</label>
+                <select
+                  value={selected.labelPosition}
+                  onChange={(e) =>
+                    updatePointLabelPosition(
+                      selected.id,
+                      e.target.value as LabelPosition,
+                    )
+                  }
+                >
+                  {labelPositions.map((pos) => (
+                    <option key={pos} value={pos}>
+                      {pos}
+                    </option>
+                  ))}
+                </select>
+              </div>
+
+              <label style={{ display: "flex", alignItems: "center", gap: 8 }}>
+                <input
+                  type="checkbox"
                   checked={selected.fill.enabled}
                   onChange={(e) =>
                     updatePointFilled(selected.id, e.target.checked)
@@ -197,6 +280,20 @@ export function RightPanel() {
                 />
                 Filled Circle
               </label>
+
+              <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
+                <label>Point Size</label>
+                <input
+                  type="range"
+                  min={2}
+                  max={20}
+                  step={1}
+                  value={selected.radius}
+                  onChange={(e) =>
+                    updatePointRadius(selected.id, Number(e.target.value))
+                  }
+                />
+              </div>
             </>
           )}
 
@@ -231,6 +328,81 @@ export function RightPanel() {
                   value={selected.stroke.width}
                   onChange={(e) =>
                     updateStrokeWidth(selected.id, Number(e.target.value))
+                  }
+                />
+              </div>
+            </>
+          )}
+
+          {selected.type === "circle2d" && (
+            <>
+              <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
+                <label>Radius</label>
+                <NumberInput
+                  value={selected.radius}
+                  onCommit={(next) => updateCircleRadius(selected.id, next)}
+                />
+              </div>
+
+              <label style={{ display: "flex", alignItems: "center", gap: 8 }}>
+                <input
+                  type="checkbox"
+                  checked={selected.showCenter}
+                  onChange={(e) =>
+                    updateCircleShowCenter(selected.id, e.target.checked)
+                  }
+                />
+                Show Center Point
+              </label>
+
+              <label style={{ display: "flex", alignItems: "center", gap: 8 }}>
+                <input
+                  type="checkbox"
+                  checked={selected.fill.enabled}
+                  onChange={(e) =>
+                    updateShapeFillEnabled(selected.id, e.target.checked)
+                  }
+                />
+                Fill Interior
+              </label>
+
+              <div
+                style={{ display: "flex", justifyContent: "space-between" }}
+              >
+                <label>Fill Color</label>
+                <input
+                  type="color"
+                  value={rgbaToHex(selected.fill.color)}
+                  onChange={(e) =>
+                    updateShapeFillColor(selected.id, e.target.value)
+                  }
+                />
+              </div>
+            </>
+          )}
+
+          {selected.type === "polygon2d" && (
+            <>
+              <label style={{ display: "flex", alignItems: "center", gap: 8 }}>
+                <input
+                  type="checkbox"
+                  checked={selected.fill.enabled}
+                  onChange={(e) =>
+                    updateShapeFillEnabled(selected.id, e.target.checked)
+                  }
+                />
+                Fill Interior
+              </label>
+
+              <div
+                style={{ display: "flex", justifyContent: "space-between" }}
+              >
+                <label>Fill Color</label>
+                <input
+                  type="color"
+                  value={rgbaToHex(selected.fill.color)}
+                  onChange={(e) =>
+                    updateShapeFillColor(selected.id, e.target.value)
                   }
                 />
               </div>
@@ -292,7 +464,47 @@ export function RightPanel() {
                   </div>
                 </div>
               )}
+
+              {intersections.length > 0 && (
+                <div
+                  style={{
+                    padding: "10px 12px",
+                    background: "#f8fafc",
+                    border: "1px solid #e2e8f0",
+                    borderRadius: 8,
+                  }}
+                >
+                  <strong>Intersections</strong>
+                  <div style={{ marginTop: 8, display: "flex", flexDirection: "column", gap: 6 }}>
+                    {intersections.map((p, idx) => (
+                      <div key={idx}>
+                        with <strong>{p.otherName}</strong>: ({p.x.toFixed(4)}, {p.y.toFixed(4)})
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
             </>
+          )}
+
+          {selected.type === "line2d" && intersections.length > 0 && (
+            <div
+              style={{
+                padding: "10px 12px",
+                background: "#f8fafc",
+                border: "1px solid #e2e8f0",
+                borderRadius: 8,
+              }}
+            >
+              <strong>Intersections</strong>
+              <div style={{ marginTop: 8, display: "flex", flexDirection: "column", gap: 6 }}>
+                {intersections.map((p, idx) => (
+                  <div key={idx}>
+                    with <strong>{p.otherName}</strong>: ({p.x.toFixed(4)}, {p.y.toFixed(4)})
+                  </div>
+                ))}
+              </div>
+            </div>
           )}
 
           {selected.type === "text2d" && (
@@ -439,6 +651,67 @@ export function RightPanel() {
                 <NumberInput
                   value={selected.xEnd}
                   onCommit={(next) => updateRegionXEnd(selected.id, next)}
+                />
+              </div>
+
+              <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
+                <label>Region Text</label>
+                <input
+                  type="text"
+                  value={selected.labelText}
+                  onChange={(e) =>
+                    updateRegionLabelText(selected.id, e.target.value)
+                  }
+                />
+              </div>
+
+              <div style={{ display: "flex", gap: 8 }}>
+                <div style={{ flex: 1 }}>
+                  <label style={{ display: "block", marginBottom: 6 }}>Text X</label>
+                  <NumberInput
+                    value={selected.labelX}
+                    onCommit={(next) => updateRegionLabelX(selected.id, next)}
+                  />
+                </div>
+                <div style={{ flex: 1 }}>
+                  <label style={{ display: "block", marginBottom: 6 }}>Text Y</label>
+                  <NumberInput
+                    value={selected.labelY}
+                    onCommit={(next) => updateRegionLabelY(selected.id, next)}
+                  />
+                </div>
+              </div>
+
+              <div
+                style={{ display: "flex", justifyContent: "space-between" }}
+              >
+                <label>Text Color</label>
+                <input
+                  type="color"
+                  value={rgbaToHex(selected.labelStyle.color)}
+                  onChange={(e) =>
+                    updateRegionLabelColor(selected.id, e.target.value)
+                  }
+                />
+              </div>
+
+              <div
+                style={{
+                  display: "flex",
+                  justifyContent: "space-between",
+                  gap: 12,
+                }}
+              >
+                <label>Text Size</label>
+                <input
+                  type="range"
+                  min={10}
+                  max={48}
+                  step={1}
+                  value={selected.labelStyle.fontSize}
+                  onChange={(e) =>
+                    updateRegionLabelSize(selected.id, Number(e.target.value))
+                  }
                 />
               </div>
             </>

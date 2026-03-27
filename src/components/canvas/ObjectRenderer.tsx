@@ -1,9 +1,10 @@
 import type { PointerEvent as ReactPointerEvent } from "react";
 import katex from "katex";
-import type { SceneObject } from "../../types/objects";
+import type { LabelPosition, SceneObject } from "../../types/objects";
 import { rgbaToCss } from "../../types/styles";
 import {
   buildFunctionPath,
+  buildImplicitPath,
   buildPolygonPath,
   buildRegionPath,
   sampleFunctionPoints,
@@ -18,6 +19,7 @@ type Props = {
   toScreenX: (x: number) => number;
   toScreenY: (y: number) => number;
   currentXRange: [number, number];
+  currentYRange: [number, number];
   viewHeight: number;
   onSelect: (id: string) => void;
   onPointerDown: (
@@ -27,6 +29,28 @@ type Props = {
   ) => void;
 };
 
+function getLabelOffset(position: LabelPosition) {
+  switch (position) {
+    case "top":
+      return { dx: 0, dy: -12, anchor: "middle" as const };
+    case "bottom":
+      return { dx: 0, dy: 18, anchor: "middle" as const };
+    case "left":
+      return { dx: -10, dy: 4, anchor: "end" as const };
+    case "right":
+      return { dx: 10, dy: 4, anchor: "start" as const };
+    case "top-left":
+      return { dx: -8, dy: -8, anchor: "end" as const };
+    case "top-right":
+      return { dx: 8, dy: -8, anchor: "start" as const };
+    case "bottom-left":
+      return { dx: -8, dy: 16, anchor: "end" as const };
+    case "bottom-right":
+    default:
+      return { dx: 8, dy: 16, anchor: "start" as const };
+  }
+}
+
 export function ObjectRenderer({
   object,
   allObjects,
@@ -34,6 +58,7 @@ export function ObjectRenderer({
   toScreenX,
   toScreenY,
   currentXRange,
+  currentYRange,
   viewHeight,
   onSelect,
   onPointerDown,
@@ -66,11 +91,24 @@ export function ObjectRenderer({
           stroke={isSelected ? "#ff9800" : "none"}
           strokeWidth={isSelected ? 2 : 0}
         />
+        {object.labelText && (
+          <text
+            x={toScreenX(object.labelX)}
+            y={toScreenY(object.labelY)}
+            fill={rgbaToCss(object.labelStyle.color)}
+            fontSize={object.labelStyle.fontSize}
+            fontFamily={object.labelStyle.fontFamily}
+            textAnchor="middle"
+          >
+            {object.labelText}
+          </text>
+        )}
       </g>
     );
   }
 
   if (object.type === "point2d") {
+    const labelOffset = getLabelOffset(object.labelPosition);
     return (
       <g
         onClick={() => onSelect(object.id)}
@@ -84,15 +122,16 @@ export function ObjectRenderer({
           stroke={rgbaToCss(object.stroke.color)}
           strokeWidth={object.stroke.width}
           fill={
-            object.fill.enabled ? rgbaToCss(object.fill.color) : "#ffffff"
+            object.fill.enabled ? rgbaToCss(object.stroke.color) : "#ffffff"
           }
         />
-        {object.label && (
+        {object.showLabel && object.label && (
           <text
-            x={toScreenX(object.x) + 8}
-            y={toScreenY(object.y) - 8}
+            x={toScreenX(object.x) + labelOffset.dx}
+            y={toScreenY(object.y) + labelOffset.dy}
             fontSize={14}
             fill="#111"
+            textAnchor={labelOffset.anchor}
           >
             {object.label}
           </text>
@@ -132,6 +171,7 @@ export function ObjectRenderer({
           stroke={rgbaToCss(object.stroke.color)}
           strokeWidth={object.stroke.width}
           strokeDasharray={(object.stroke.dashArray ?? []).join(" ")}
+          markerEnd={object.arrowEnd ? "url(#line-arrow)" : undefined}
         />
 
         {isSelected && (
@@ -180,6 +220,7 @@ export function ObjectRenderer({
   }
 
   if (object.type === "circle2d") {
+    const rPx = object.radius * Math.abs(toScreenX(1) - toScreenX(0));
     return (
       <g
         onClick={() => onSelect(object.id)}
@@ -189,48 +230,24 @@ export function ObjectRenderer({
         <circle
           cx={toScreenX(object.cx)}
           cy={toScreenY(object.cy)}
-          r={object.radius * Math.abs(toScreenX(1) - toScreenX(0))}
+          r={rPx}
           stroke={rgbaToCss(object.stroke.color)}
           strokeWidth={object.stroke.width}
           fill={object.fill.enabled ? rgbaToCss(object.fill.color) : "none"}
         />
+        {object.showCenter && (
+          <circle
+            cx={toScreenX(object.cx)}
+            cy={toScreenY(object.cy)}
+            r={3}
+            fill={rgbaToCss(object.stroke.color)}
+          />
+        )}
         {isSelected && (
           <circle
             cx={toScreenX(object.cx)}
             cy={toScreenY(object.cy)}
-            r={object.radius * Math.abs(toScreenX(1) - toScreenX(0)) + 5}
-            fill="none"
-            stroke="#ff9800"
-            strokeWidth={1.5}
-            strokeDasharray="4 4"
-          />
-        )}
-      </g>
-    );
-  }
-
-  if (object.type === "ellipse2d") {
-    return (
-      <g
-        onClick={() => onSelect(object.id)}
-        onPointerDown={(e) => onPointerDown(e, object.id, "move")}
-        style={{ cursor: "pointer" }}
-      >
-        <ellipse
-          cx={toScreenX(object.cx)}
-          cy={toScreenY(object.cy)}
-          rx={object.rx * Math.abs(toScreenX(1) - toScreenX(0))}
-          ry={object.ry * Math.abs(toScreenY(1) - toScreenY(0))}
-          stroke={rgbaToCss(object.stroke.color)}
-          strokeWidth={object.stroke.width}
-          fill={object.fill.enabled ? rgbaToCss(object.fill.color) : "none"}
-        />
-        {isSelected && (
-          <ellipse
-            cx={toScreenX(object.cx)}
-            cy={toScreenY(object.cy)}
-            rx={object.rx * Math.abs(toScreenX(1) - toScreenX(0)) + 5}
-            ry={object.ry * Math.abs(toScreenY(1) - toScreenY(0)) + 5}
+            r={rPx + 5}
             fill="none"
             stroke="#ff9800"
             strokeWidth={1.5}
@@ -270,6 +287,38 @@ export function ObjectRenderer({
   }
 
   if (object.type === "function2d") {
+    if (object.expression.includes("=")) {
+      const d = buildImplicitPath(
+        object.expression,
+        currentXRange,
+        currentYRange,
+        120,
+        120,
+        toScreenX,
+        toScreenY,
+      );
+
+      return (
+        <g onClick={() => onSelect(object.id)} style={{ cursor: "pointer" }}>
+          <path
+            d={d}
+            fill="none"
+            stroke={rgbaToCss(object.stroke.color)}
+            strokeWidth={object.stroke.width}
+          />
+          {isSelected && d && (
+            <path
+              d={d}
+              fill="none"
+              stroke="#ff9800"
+              strokeWidth={object.stroke.width + 4}
+              strokeOpacity={0.2}
+            />
+          )}
+        </g>
+      );
+    }
+
     const resolvedDomain = object.domain ?? currentXRange;
     let d = "";
 

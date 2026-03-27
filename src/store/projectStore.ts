@@ -1,5 +1,9 @@
 import { create } from "zustand";
-import type { ProjectState, SceneObject } from "../types/objects";
+import type {
+  LabelPosition,
+  ProjectState,
+  SceneObject,
+} from "../types/objects";
 import {
   defaultFill,
   defaultStroke,
@@ -14,14 +18,14 @@ type HistorySnapshot = {
   selectedObjectId: ProjectState["selectedObjectId"];
 };
 
-type ToolMode = "select" | "line";
+type ToolMode = "select" | "line" | "polygon";
 
 type ProjectActions = {
   addPoint: () => void;
   addCircle: () => void;
-  addEllipse: () => void;
-  addPolygon: () => void;
   startLineTool: () => void;
+  startPolygonTool: () => void;
+  finishPolygonTool: () => void;
   addFunction: () => void;
   addText: () => void;
   addFormula: () => void;
@@ -33,10 +37,12 @@ type ProjectActions = {
   ) => void;
 
   setActiveTool: (tool: ToolMode) => void;
+  cancelDraftTool: () => void;
   handleCanvasWorldClick: (x: number, y: number) => void;
 
   selectObject: (id: string | null) => void;
   updateObject: (id: string, patch: Partial<SceneObject>) => void;
+  updateObjectName: (id: string, name: string) => void;
 
   updateStrokeColor: (id: string, colorHex: string) => void;
   updateStrokeWidth: (id: string, width: number) => void;
@@ -51,14 +57,30 @@ type ProjectActions = {
 
   updateScene: (patch: Partial<ProjectState["scene"]>) => void;
   updateSceneDirect: (patch: Partial<ProjectState["scene"]>) => void;
+  updateCaptionText: (text: string) => void;
+  updateCaptionFontSize: (fontSize: number) => void;
+  updateCaptionColor: (color: string) => void;
 
   updatePointLabel: (id: string, label: string) => void;
   updatePointFilled: (id: string, filled: boolean) => void;
+  updatePointShowLabel: (id: string, showLabel: boolean) => void;
+  updatePointLabelPosition: (id: string, position: LabelPosition) => void;
+  updatePointRadius: (id: string, radius: number) => void;
+
+  updateCircleRadius: (id: string, radius: number) => void;
+  updateCircleShowCenter: (id: string, showCenter: boolean) => void;
+  updateShapeFillEnabled: (id: string, enabled: boolean) => void;
+  updateShapeFillColor: (id: string, colorHex: string) => void;
 
   updateRegionFillColor: (id: string, colorHex: string) => void;
   updateRegionOpacity: (id: string, opacity: number) => void;
   updateRegionXStart: (id: string, xStart: number) => void;
   updateRegionXEnd: (id: string, xEnd: number) => void;
+  updateRegionLabelText: (id: string, text: string) => void;
+  updateRegionLabelX: (id: string, x: number) => void;
+  updateRegionLabelY: (id: string, y: number) => void;
+  updateRegionLabelColor: (id: string, colorHex: string) => void;
+  updateRegionLabelSize: (id: string, fontSize: number) => void;
 
   moveObjectBy: (id: string, dx: number, dy: number) => void;
   moveLineEndpointBy: (
@@ -87,6 +109,7 @@ type ProjectStore = ProjectState &
     historyFuture: HistorySnapshot[];
     activeTool: ToolMode;
     lineDraftStart: { x: number; y: number } | null;
+    polygonDraftPoints: Array<{ x: number; y: number }>;
     interactionSnapshot: HistorySnapshot | null;
   };
 
@@ -95,6 +118,7 @@ const initialState: ProjectState = {
     mode: "2d",
     width: 900,
     height: 600,
+    captionHeight: 72,
     xRange: [-10, 10],
     yRange: [-10, 10],
     xTickStep: 1,
@@ -102,6 +126,9 @@ const initialState: ProjectState = {
     showGrid: true,
     showAxes: true,
     snapToGrid: false,
+    captionText: "",
+    captionFontSize: 16,
+    captionColor: "#333333",
   },
   objects: [],
   selectedObjectId: null,
@@ -139,6 +166,7 @@ export const useProjectStore = create<ProjectStore>((set, get) => ({
   historyFuture: [],
   activeTool: "select",
   lineDraftStart: null,
+  polygonDraftPoints: [],
   interactionSnapshot: null,
 
   addPoint: () =>
@@ -165,10 +193,13 @@ export const useProjectStore = create<ProjectStore>((set, get) => ({
                 color: { r: 30, g: 30, b: 30, a: 1 },
               },
               label: "A",
+              showLabel: true,
+              labelPosition: "top-right",
             },
           ],
           activeTool: "select",
           lineDraftStart: null,
+          polygonDraftPoints: [],
         };
       }),
     ),
@@ -195,74 +226,10 @@ export const useProjectStore = create<ProjectStore>((set, get) => ({
                 color: { r: 0, g: 102, b: 204, a: 1 },
               },
               fill: {
-                enabled: true,
+                enabled: false,
                 color: { r: 0, g: 102, b: 204, a: 0.12 },
               },
-            },
-          ],
-        };
-      }),
-    ),
-
-  addEllipse: () =>
-    set((state) =>
-      withHistory(state, () => {
-        const id = makeId("ellipse");
-        return {
-          selectedObjectId: id,
-          objects: [
-            ...state.objects,
-            {
-              id,
-              name: "Ellipse",
-              type: "ellipse2d",
-              visible: true,
-              locked: false,
-              cx: 0,
-              cy: 0,
-              rx: 3,
-              ry: 1.5,
-              stroke: {
-                ...defaultStroke(),
-                color: { r: 0, g: 153, b: 102, a: 1 },
-              },
-              fill: {
-                enabled: true,
-                color: { r: 0, g: 153, b: 102, a: 0.12 },
-              },
-            },
-          ],
-        };
-      }),
-    ),
-
-  addPolygon: () =>
-    set((state) =>
-      withHistory(state, () => {
-        const id = makeId("polygon");
-        return {
-          selectedObjectId: id,
-          objects: [
-            ...state.objects,
-            {
-              id,
-              name: "Polygon",
-              type: "polygon2d",
-              visible: true,
-              locked: false,
-              points: [
-                { x: -2, y: -1 },
-                { x: 2, y: -1 },
-                { x: 0, y: 2 },
-              ],
-              stroke: {
-                ...defaultStroke(),
-                color: { r: 153, g: 51, b: 204, a: 1 },
-              },
-              fill: {
-                enabled: true,
-                color: { r: 153, g: 51, b: 204, a: 0.12 },
-              },
+              showCenter: false,
             },
           ],
         };
@@ -273,8 +240,54 @@ export const useProjectStore = create<ProjectStore>((set, get) => ({
     set(() => ({
       activeTool: "line",
       lineDraftStart: null,
+      polygonDraftPoints: [],
       selectedObjectId: null,
     })),
+
+  startPolygonTool: () =>
+    set(() => ({
+      activeTool: "polygon",
+      lineDraftStart: null,
+      polygonDraftPoints: [],
+      selectedObjectId: null,
+    })),
+
+  finishPolygonTool: () =>
+    set((state) => {
+      if (state.polygonDraftPoints.length < 3) {
+        return {
+          activeTool: "select" as ToolMode,
+          polygonDraftPoints: [],
+        };
+      }
+
+      const id = makeId("polygon");
+
+      return withHistory(state, () => ({
+        activeTool: "select" as ToolMode,
+        selectedObjectId: id,
+        polygonDraftPoints: [],
+        objects: [
+          ...state.objects,
+          {
+            id,
+            name: "Polygon",
+            type: "polygon2d",
+            visible: true,
+            locked: false,
+            points: state.polygonDraftPoints,
+            stroke: {
+              ...defaultStroke(),
+              color: { r: 153, g: 51, b: 204, a: 1 },
+            },
+            fill: {
+              enabled: true,
+              color: { r: 153, g: 51, b: 204, a: 0.12 },
+            },
+          },
+        ],
+      }));
+    }),
 
   addFunction: () =>
     set((state) =>
@@ -301,6 +314,7 @@ export const useProjectStore = create<ProjectStore>((set, get) => ({
           ],
           activeTool: "select",
           lineDraftStart: null,
+          polygonDraftPoints: [],
         };
       }),
     ),
@@ -327,6 +341,7 @@ export const useProjectStore = create<ProjectStore>((set, get) => ({
           ],
           activeTool: "select",
           lineDraftStart: null,
+          polygonDraftPoints: [],
         };
       }),
     ),
@@ -356,6 +371,7 @@ export const useProjectStore = create<ProjectStore>((set, get) => ({
           ],
           activeTool: "select",
           lineDraftStart: null,
+          polygonDraftPoints: [],
         };
       }),
     ),
@@ -383,6 +399,13 @@ export const useProjectStore = create<ProjectStore>((set, get) => ({
                 enabled: true,
                 color: { r: 255, g: 160, b: 0, a: 0.28 },
               },
+              labelText: "",
+              labelX: (xStart + xEnd) / 2,
+              labelY: 0,
+              labelStyle: {
+                ...defaultTextStyle(),
+                fontSize: 18,
+              },
             },
           ],
         };
@@ -393,48 +416,64 @@ export const useProjectStore = create<ProjectStore>((set, get) => ({
     set(() => ({
       activeTool: tool,
       lineDraftStart: null,
+      polygonDraftPoints: [],
       selectedObjectId: tool === "select" ? get().selectedObjectId : null,
+    })),
+
+  cancelDraftTool: () =>
+    set(() => ({
+      activeTool: "select",
+      lineDraftStart: null,
+      polygonDraftPoints: [],
     })),
 
   handleCanvasWorldClick: (x, y) =>
     set((state) => {
-      if (state.activeTool !== "line") {
-        return {
-          selectedObjectId: null,
-        };
-      }
+      if (state.activeTool === "line") {
+        if (state.lineDraftStart === null) {
+          return {
+            lineDraftStart: { x, y },
+            selectedObjectId: null,
+          };
+        }
 
-      if (state.lineDraftStart === null) {
-        return {
-          lineDraftStart: { x, y },
-          selectedObjectId: null,
-        };
-      }
+        const id = makeId("line");
 
-      const id = makeId("line");
-
-      return withHistory(state, () => ({
-        objects: [
-          ...state.objects,
-          {
-            id,
-            name: "Line",
-            type: "line2d",
-            visible: true,
-            locked: false,
-            x1: state.lineDraftStart!.x,
-            y1: state.lineDraftStart!.y,
-            x2: x,
-            y2: y,
-            stroke: {
-              ...defaultStroke(),
-              color: { r: 200, g: 40, b: 40, a: 1 },
+        return withHistory(state, () => ({
+          objects: [
+            ...state.objects,
+            {
+              id,
+              name: "Line",
+              type: "line2d",
+              visible: true,
+              locked: false,
+              x1: state.lineDraftStart!.x,
+              y1: state.lineDraftStart!.y,
+              x2: x,
+              y2: y,
+              stroke: {
+                ...defaultStroke(),
+                color: { r: 200, g: 40, b: 40, a: 1 },
+              },
+              arrowEnd: true,
             },
-          },
-        ],
-        selectedObjectId: id,
-        lineDraftStart: null,
-      }));
+          ],
+          selectedObjectId: id,
+          lineDraftStart: null,
+        }));
+      }
+
+      if (state.activeTool === "polygon") {
+        return {
+          polygonDraftPoints: [...state.polygonDraftPoints, { x, y }],
+          selectedObjectId: null,
+        };
+      }
+
+      return {
+        selectedObjectId: null,
+      };
     }),
 
   selectObject: (id) =>
@@ -442,6 +481,7 @@ export const useProjectStore = create<ProjectStore>((set, get) => ({
       selectedObjectId: id,
       activeTool: "select",
       lineDraftStart: null,
+      polygonDraftPoints: [],
     })),
 
   updateObject: (id, patch) =>
@@ -453,14 +493,20 @@ export const useProjectStore = create<ProjectStore>((set, get) => ({
       })),
     ),
 
+  updateObjectName: (id, name) =>
+    set((state) =>
+      withHistory(state, () => ({
+        objects: state.objects.map((obj) =>
+          obj.id === id ? { ...obj, name } : obj,
+        ),
+      })),
+    ),
+
   updateStrokeColor: (id, colorHex) =>
     set((state) =>
       withHistory(state, () => ({
         objects: state.objects.map((obj) => {
-          if (
-            obj.id !== id ||
-            !("stroke" in obj)
-          ) {
+          if (obj.id !== id || !("stroke" in obj)) {
             return obj;
           }
 
@@ -479,10 +525,7 @@ export const useProjectStore = create<ProjectStore>((set, get) => ({
     set((state) =>
       withHistory(state, () => ({
         objects: state.objects.map((obj) => {
-          if (
-            obj.id !== id ||
-            !("stroke" in obj)
-          ) {
+          if (obj.id !== id || !("stroke" in obj)) {
             return obj;
           }
 
@@ -597,6 +640,36 @@ export const useProjectStore = create<ProjectStore>((set, get) => ({
       },
     })),
 
+  updateCaptionText: (captionText) =>
+    set((state) =>
+      withHistory(state, () => ({
+        scene: {
+          ...state.scene,
+          captionText,
+        },
+      })),
+    ),
+
+  updateCaptionFontSize: (captionFontSize) =>
+    set((state) =>
+      withHistory(state, () => ({
+        scene: {
+          ...state.scene,
+          captionFontSize,
+        },
+      })),
+    ),
+
+  updateCaptionColor: (captionColor) =>
+    set((state) =>
+      withHistory(state, () => ({
+        scene: {
+          ...state.scene,
+          captionColor,
+        },
+      })),
+    ),
+
   updatePointLabel: (id, label) =>
     set((state) =>
       withHistory(state, () => ({
@@ -625,6 +698,103 @@ export const useProjectStore = create<ProjectStore>((set, get) => ({
               }
             : obj,
         ),
+      })),
+    ),
+
+  updatePointShowLabel: (id, showLabel) =>
+    set((state) =>
+      withHistory(state, () => ({
+        objects: state.objects.map((obj) =>
+          obj.id === id && obj.type === "point2d"
+            ? { ...obj, showLabel }
+            : obj,
+        ),
+      })),
+    ),
+
+  updatePointLabelPosition: (id, position) =>
+    set((state) =>
+      withHistory(state, () => ({
+        objects: state.objects.map((obj) =>
+          obj.id === id && obj.type === "point2d"
+            ? { ...obj, labelPosition: position }
+            : obj,
+        ),
+      })),
+    ),
+
+  updatePointRadius: (id, radius) =>
+    set((state) =>
+      withHistory(state, () => ({
+        objects: state.objects.map((obj) =>
+          obj.id === id && obj.type === "point2d"
+            ? { ...obj, radius: Math.max(1, radius) }
+            : obj,
+        ),
+      })),
+    ),
+
+  updateCircleRadius: (id, radius) =>
+    set((state) =>
+      withHistory(state, () => ({
+        objects: state.objects.map((obj) =>
+          obj.id === id && obj.type === "circle2d"
+            ? { ...obj, radius: Math.max(0.1, radius) }
+            : obj,
+        ),
+      })),
+    ),
+
+  updateCircleShowCenter: (id, showCenter) =>
+    set((state) =>
+      withHistory(state, () => ({
+        objects: state.objects.map((obj) =>
+          obj.id === id && obj.type === "circle2d"
+            ? { ...obj, showCenter }
+            : obj,
+        ),
+      })),
+    ),
+
+  updateShapeFillEnabled: (id, enabled) =>
+    set((state) =>
+      withHistory(state, () => ({
+        objects: state.objects.map((obj) => {
+          if (
+            obj.id === id &&
+            (obj.type === "circle2d" || obj.type === "polygon2d")
+          ) {
+            return {
+              ...obj,
+              fill: {
+                ...obj.fill,
+                enabled,
+              },
+            };
+          }
+          return obj;
+        }),
+      })),
+    ),
+
+  updateShapeFillColor: (id, colorHex) =>
+    set((state) =>
+      withHistory(state, () => ({
+        objects: state.objects.map((obj) => {
+          if (
+            obj.id === id &&
+            (obj.type === "circle2d" || obj.type === "polygon2d")
+          ) {
+            return {
+              ...obj,
+              fill: {
+                ...obj.fill,
+                color: hexToRgba(colorHex, obj.fill.color.a),
+              },
+            };
+          }
+          return obj;
+        }),
       })),
     ),
 
@@ -687,6 +857,73 @@ export const useProjectStore = create<ProjectStore>((set, get) => ({
       })),
     ),
 
+  updateRegionLabelText: (id, text) =>
+    set((state) =>
+      withHistory(state, () => ({
+        objects: state.objects.map((obj) =>
+          obj.id === id && obj.type === "region2d"
+            ? { ...obj, labelText: text }
+            : obj,
+        ),
+      })),
+    ),
+
+  updateRegionLabelX: (id, x) =>
+    set((state) =>
+      withHistory(state, () => ({
+        objects: state.objects.map((obj) =>
+          obj.id === id && obj.type === "region2d"
+            ? { ...obj, labelX: x }
+            : obj,
+        ),
+      })),
+    ),
+
+  updateRegionLabelY: (id, y) =>
+    set((state) =>
+      withHistory(state, () => ({
+        objects: state.objects.map((obj) =>
+          obj.id === id && obj.type === "region2d"
+            ? { ...obj, labelY: y }
+            : obj,
+        ),
+      })),
+    ),
+
+  updateRegionLabelColor: (id, colorHex) =>
+    set((state) =>
+      withHistory(state, () => ({
+        objects: state.objects.map((obj) =>
+          obj.id === id && obj.type === "region2d"
+            ? {
+                ...obj,
+                labelStyle: {
+                  ...obj.labelStyle,
+                  color: hexToRgba(colorHex, obj.labelStyle.color.a),
+                },
+              }
+            : obj,
+        ),
+      })),
+    ),
+
+  updateRegionLabelSize: (id, fontSize) =>
+    set((state) =>
+      withHistory(state, () => ({
+        objects: state.objects.map((obj) =>
+          obj.id === id && obj.type === "region2d"
+            ? {
+                ...obj,
+                labelStyle: {
+                  ...obj.labelStyle,
+                  fontSize,
+                },
+              }
+            : obj,
+        ),
+      })),
+    ),
+
   beginInteractionHistory: () =>
     set((state) => {
       if (state.interactionSnapshot !== null) return state;
@@ -736,14 +973,6 @@ export const useProjectStore = create<ProjectStore>((set, get) => ({
           };
         }
 
-        if (obj.type === "ellipse2d") {
-          return {
-            ...obj,
-            cx: obj.cx + dx,
-            cy: obj.cy + dy,
-          };
-        }
-
         if (obj.type === "polygon2d") {
           return {
             ...obj,
@@ -759,6 +988,14 @@ export const useProjectStore = create<ProjectStore>((set, get) => ({
             ...obj,
             x: obj.x + dx,
             y: obj.y + dy,
+          };
+        }
+
+        if (obj.type === "region2d") {
+          return {
+            ...obj,
+            labelX: obj.labelX + dx,
+            labelY: obj.labelY + dy,
           };
         }
 
@@ -823,6 +1060,7 @@ export const useProjectStore = create<ProjectStore>((set, get) => ({
         selectedObjectId: parsed.selectedObjectId ?? null,
         activeTool: "select",
         lineDraftStart: null,
+        polygonDraftPoints: [],
         interactionSnapshot: null,
       })),
     );
@@ -834,6 +1072,7 @@ export const useProjectStore = create<ProjectStore>((set, get) => ({
         ...initialState,
         activeTool: "select",
         lineDraftStart: null,
+        polygonDraftPoints: [],
         interactionSnapshot: null,
       })),
     ),
@@ -854,6 +1093,7 @@ export const useProjectStore = create<ProjectStore>((set, get) => ({
         historyFuture: [current, ...state.historyFuture],
         activeTool: "select" as ToolMode,
         lineDraftStart: null,
+        polygonDraftPoints: [],
         interactionSnapshot: null,
       };
     }),
@@ -874,6 +1114,7 @@ export const useProjectStore = create<ProjectStore>((set, get) => ({
         historyFuture: state.historyFuture.slice(1),
         activeTool: "select" as ToolMode,
         lineDraftStart: null,
+        polygonDraftPoints: [],
         interactionSnapshot: null,
       };
     }),

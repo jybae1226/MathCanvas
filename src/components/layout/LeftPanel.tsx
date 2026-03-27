@@ -50,9 +50,9 @@ function NumberInput({
 export function LeftPanel() {
   const addPoint = useProjectStore((s) => s.addPoint);
   const addCircle = useProjectStore((s) => s.addCircle);
-  const addEllipse = useProjectStore((s) => s.addEllipse);
-  const addPolygon = useProjectStore((s) => s.addPolygon);
   const startLineTool = useProjectStore((s) => s.startLineTool);
+  const startPolygonTool = useProjectStore((s) => s.startPolygonTool);
+  const finishPolygonTool = useProjectStore((s) => s.finishPolygonTool);
   const addFunction = useProjectStore((s) => s.addFunction);
   const addText = useProjectStore((s) => s.addText);
   const addFormula = useProjectStore((s) => s.addFormula);
@@ -64,12 +64,18 @@ export function LeftPanel() {
 
   const scene = useProjectStore((s) => s.scene);
   const updateScene = useProjectStore((s) => s.updateScene);
+  const updateCaptionText = useProjectStore((s) => s.updateCaptionText);
+  const updateCaptionFontSize = useProjectStore((s) => s.updateCaptionFontSize);
+  const updateCaptionColor = useProjectStore((s) => s.updateCaptionColor);
 
   const activeTool = useProjectStore((s) => s.activeTool);
   const lineDraftStart = useProjectStore((s) => s.lineDraftStart);
+  const polygonDraftPoints = useProjectStore((s) => s.polygonDraftPoints);
 
   const curveCandidates = objects.filter(
-    (obj) => obj.type === "function2d" || obj.type === "line2d",
+    (obj) =>
+      obj.type === "function2d" ||
+      obj.type === "line2d",
   );
 
   const [curveAId, setCurveAId] = useState("");
@@ -85,7 +91,7 @@ export function LeftPanel() {
   return (
     <aside
       style={{
-        width: 340,
+        width: 360,
         borderRight: "1px solid #ddd",
         padding: 16,
         background: "#fff",
@@ -98,12 +104,16 @@ export function LeftPanel() {
         <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
           <button onClick={addPoint}>+ Point</button>
           <button onClick={startLineTool}>
-            + Line (캔버스에서 2점 클릭)
+            + Arrow Line (캔버스에서 2점 클릭)
           </button>
           <button onClick={addCircle}>+ Circle</button>
-          <button onClick={addEllipse}>+ Ellipse</button>
-          <button onClick={addPolygon}>+ Polygon</button>
-          <button onClick={addFunction}>+ Function</button>
+          <button onClick={startPolygonTool}>
+            + Polygon (점 클릭 후 Enter 완료)
+          </button>
+          {activeTool === "polygon" && (
+            <button onClick={finishPolygonTool}>Finish Polygon</button>
+          )}
+          <button onClick={addFunction}>+ Function / Implicit Curve</button>
           <button onClick={addText}>+ Text</button>
           <button onClick={addFormula}>+ Formula</button>
         </div>
@@ -112,7 +122,12 @@ export function LeftPanel() {
           Tool: <strong>{activeTool}</strong>
           {activeTool === "line" && (
             <div style={{ marginTop: 4 }}>
-              {lineDraftStart ? "두 번째 점을 클릭하세요." : "첫 번째 점을 클릭하세요."}
+              {lineDraftStart ? "두 번째 점을 클릭하세요. (Esc 취소)" : "첫 번째 점을 클릭하세요. (Esc 취소)"}
+            </div>
+          )}
+          {activeTool === "polygon" && (
+            <div style={{ marginTop: 4 }}>
+              현재 점 개수: {polygonDraftPoints.length} (Enter 완료 / Esc 취소)
             </div>
           )}
           <div style={{ marginTop: 8 }}>
@@ -187,6 +202,24 @@ export function LeftPanel() {
           <label style={{ display: "flex", alignItems: "center", gap: 8 }}>
             <input
               type="checkbox"
+              checked={scene.showGrid}
+              onChange={(e) => updateScene({ showGrid: e.target.checked })}
+            />
+            Show Grid
+          </label>
+
+          <label style={{ display: "flex", alignItems: "center", gap: 8 }}>
+            <input
+              type="checkbox"
+              checked={scene.showAxes}
+              onChange={(e) => updateScene({ showAxes: e.target.checked })}
+            />
+            Show Axes
+          </label>
+
+          <label style={{ display: "flex", alignItems: "center", gap: 8 }}>
+            <input
+              type="checkbox"
               checked={scene.snapToGrid}
               onChange={(e) => updateScene({ snapToGrid: e.target.checked })}
             />
@@ -246,6 +279,39 @@ export function LeftPanel() {
               onCommit={(next) =>
                 updateScene({ yTickStep: next <= 0 ? 1 : next })
               }
+            />
+          </div>
+        </div>
+      </section>
+
+      <section style={{ marginTop: 24 }}>
+        <h3>Caption</h3>
+
+        <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
+          <textarea
+            value={scene.captionText}
+            onChange={(e) => updateCaptionText(e.target.value)}
+            placeholder="예: Figure 1.1  sin(x) 그래프"
+          />
+
+          <div>
+            <label style={{ display: "block", marginBottom: 6 }}>Caption Size</label>
+            <input
+              type="range"
+              min={10}
+              max={28}
+              step={1}
+              value={scene.captionFontSize}
+              onChange={(e) => updateCaptionFontSize(Number(e.target.value))}
+            />
+          </div>
+
+          <div>
+            <label style={{ display: "block", marginBottom: 6 }}>Caption Color</label>
+            <input
+              type="color"
+              value={scene.captionColor}
+              onChange={(e) => updateCaptionColor(e.target.value)}
             />
           </div>
         </div>

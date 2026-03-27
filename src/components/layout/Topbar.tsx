@@ -1,4 +1,4 @@
-import { useRef } from "react";
+import { useEffect, useRef } from "react";
 import { useProjectStore } from "../../store/projectStore";
 
 function downloadTextFile(filename: string, content: string, mimeType: string) {
@@ -31,13 +31,6 @@ function exportSvg() {
     );
   }
 
-  if (!source.includes('xmlns:xlink="http://www.w3.org/1999/xlink"')) {
-    source = source.replace(
-      "<svg",
-      '<svg xmlns:xlink="http://www.w3.org/1999/xlink"',
-    );
-  }
-
   downloadTextFile("math-diagram.svg", source, "image/svg+xml;charset=utf-8");
 }
 
@@ -64,7 +57,7 @@ function exportPng() {
 
   image.onload = () => {
     const width = Number(svgElement.getAttribute("width") ?? 900);
-    const height = Number(svgElement.getAttribute("height") ?? 600);
+    const height = Number(svgElement.getAttribute("height") ?? 672);
 
     const canvas = document.createElement("canvas");
     canvas.width = width;
@@ -110,6 +103,11 @@ export function Topbar() {
   const resetProject = useProjectStore((s) => s.resetProject);
   const undo = useProjectStore((s) => s.undo);
   const redo = useProjectStore((s) => s.redo);
+  const deleteSelectedObject = useProjectStore((s) => s.deleteSelectedObject);
+  const setActiveTool = useProjectStore((s) => s.setActiveTool);
+  const cancelDraftTool = useProjectStore((s) => s.cancelDraftTool);
+  const finishPolygonTool = useProjectStore((s) => s.finishPolygonTool);
+  const activeTool = useProjectStore((s) => s.activeTool);
   const historyPastLength = useProjectStore((s) => s.historyPast.length);
   const historyFutureLength = useProjectStore((s) => s.historyFuture.length);
 
@@ -139,6 +137,31 @@ export function Topbar() {
     event.target.value = "";
   };
 
+  useEffect(() => {
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (event.key === "Delete") {
+        deleteSelectedObject();
+      }
+
+      if (event.key === "Escape") {
+        cancelDraftTool();
+      }
+
+      if (event.key === "Enter" && activeTool === "polygon") {
+        finishPolygonTool();
+      }
+    };
+
+    window.addEventListener("keydown", onKeyDown);
+    return () => window.removeEventListener("keydown", onKeyDown);
+  }, [
+    activeTool,
+    cancelDraftTool,
+    deleteSelectedObject,
+    finishPolygonTool,
+    setActiveTool,
+  ]);
+
   return (
     <header
       style={{
@@ -151,7 +174,7 @@ export function Topbar() {
         background: "#fff",
       }}
     >
-      <div style={{ fontWeight: 700 }}>MathDiagram Studio</div>
+      <div style={{ fontWeight: 700 }}>MathCanvas</div>
 
       <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
         <button onClick={resetProject}>New</button>
