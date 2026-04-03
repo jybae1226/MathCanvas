@@ -18,10 +18,6 @@ function getCanvasSvgElement(): SVGSVGElement | null {
   return document.getElementById("math-diagram-svg") as SVGSVGElement | null;
 }
 
-function fontSizeCompensation(height: number) {
-  return height * 0.08;
-}
-
 async function buildExportableSvg() {
   const svgElement = getCanvasSvgElement();
   if (!svgElement) return null;
@@ -35,35 +31,45 @@ async function buildExportableSvg() {
 
   for (const node of Array.from(formulaNodes)) {
     const formulaId = node.getAttribute("data-formula-id");
-    const x = Number(node.getAttribute("data-export-x") ?? "0");
-    const y = Number(node.getAttribute("data-export-y") ?? "0");
-    const width = Number(node.getAttribute("data-export-width") ?? "200");
-    const height = Number(node.getAttribute("data-export-height") ?? "80");
-
     if (!formulaId) continue;
 
-    const liveNode = document.querySelector(
+    const liveForeignObject = document.querySelector(
+      `foreignObject[data-formula-id="${formulaId}"]`,
+    ) as SVGForeignObjectElement | null;
+
+    const liveInner = document.querySelector(
       `[data-formula-source="${formulaId}"]`,
     ) as HTMLElement | null;
 
-    if (!liveNode) continue;
+    if (!liveForeignObject || !liveInner) continue;
 
     try {
-      const dataUrl = await toPng(liveNode, {
+      const dataUrl = await toPng(liveInner, {
         cacheBust: true,
         backgroundColor: "rgba(0,0,0,0)",
         pixelRatio: 2,
       });
 
-      const imageNode = document.createElementNS(svgNs, "image");
-      const scaleFix = 0.78;
-      const xFix = 0;
-      const yFix = fontSizeCompensation(height);
+      const foRect = liveForeignObject.getBoundingClientRect();
+      const innerRect = liveInner.getBoundingClientRect();
+      const svgRect = svgElement.getBoundingClientRect();
 
-      imageNode.setAttribute("x", String(x + xFix));
-      imageNode.setAttribute("y", String(y + yFix));
-      imageNode.setAttribute("width", String(width * scaleFix));
-      imageNode.setAttribute("height", String(height * scaleFix));
+      const svgWidth = Number(svgElement.getAttribute("width") ?? svgRect.width);
+      const svgHeight = Number(svgElement.getAttribute("height") ?? svgRect.height);
+
+      const scaleX = svgWidth / svgRect.width;
+      const scaleY = svgHeight / svgRect.height;
+
+      const imageX = (innerRect.left - svgRect.left) * scaleX;
+      const imageY = (innerRect.top - svgRect.top) * scaleY;
+      const imageWidth = innerRect.width * scaleX;
+      const imageHeight = innerRect.height * scaleY;
+
+      const imageNode = document.createElementNS(svgNs, "image");
+      imageNode.setAttribute("x", String(imageX));
+      imageNode.setAttribute("y", String(imageY));
+      imageNode.setAttribute("width", String(imageWidth));
+      imageNode.setAttribute("height", String(imageHeight));
       imageNode.setAttribute("href", dataUrl);
 
       node.parentNode?.replaceChild(imageNode, node);

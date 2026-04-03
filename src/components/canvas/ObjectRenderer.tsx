@@ -479,8 +479,8 @@ export function ObjectRenderer({
     const fontPx = object.textStyle.fontSize;
     const anchorX = toScreenX(object.x);
     const anchorY = toScreenY(object.y);
-    const boxWidth = Math.max(180, object.latex.length * fontPx * 0.62);
-    const boxHeight = fontPx * 1.7;
+    const boxWidth = Math.max(240, object.latex.length * fontPx * 0.8);
+    const boxHeight = fontPx * 2.4;
 
     return (
       <g
@@ -489,29 +489,25 @@ export function ObjectRenderer({
         style={{ cursor: "move" }}
       >
         <foreignObject
-          x={anchorX}
-          y={anchorY - fontPx * 0.95}
-          width={boxWidth}
-          height={boxHeight}
-          overflow="visible"
-          data-export-formula="true"
-          data-formula-id={object.id}
-          data-export-x={String(anchorX)}
-          data-export-y={String(anchorY - fontPx * 0.95)}
-          data-export-width={String(boxWidth)}
-          data-export-height={String(boxHeight)}
+        x={anchorX}
+        y={anchorY - fontPx}
+        width={boxWidth}
+        height={boxHeight}
+        overflow="visible"
+        data-export-formula="true"
+        data-formula-id={object.id}
         >
           <div
             data-formula-source={object.id}
             style={{
               color: rgbaToCss(object.textStyle.color),
-              fontSize: `${fontPx}px`,
               lineHeight: 1.1,
               display: "inline-block",
               whiteSpace: "nowrap",
               userSelect: "none",
               background: "transparent",
-            }}
+              fontSize: `${fontPx}px`,
+              }}
             dangerouslySetInnerHTML={{ __html: html }}
           />
         </foreignObject>
