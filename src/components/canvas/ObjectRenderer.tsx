@@ -471,7 +471,6 @@ export function ObjectRenderer({
     const fontPx = object.textStyle.fontSize;
     const anchorX = toScreenX(object.x);
     const anchorY = toScreenY(object.y);
-    const displayText = latexToDisplayText(object.latex);
 
     return (
       <g
@@ -484,9 +483,9 @@ export function ObjectRenderer({
           y={anchorY}
           fill={rgbaToCss(object.textStyle.color)}
           fontSize={fontPx}
-          fontFamily={"Cambria Math, STIX Two Math, Times New Roman, serif"}
+          fontFamily={object.textStyle.fontFamily || "Arial"}
         >
-          {displayText}
+          {object.latex}
         </text>
 
         {isSelected && (

@@ -77,10 +77,10 @@ export function LeftPanel() {
     [objects],
   );
 
-  const intersectionCandidates = useMemo(
+    const intersectionCandidates = useMemo(
     () =>
       objects.filter(
-        (obj) => obj.type === "function2d" && obj.expression.trim() && !obj.expression.includes("="),
+        (obj) => obj.type === "function2d" && obj.expression.trim(),
       ),
     [objects],
   );
@@ -307,7 +307,14 @@ export function LeftPanel() {
                 });
               }}
             />
-            <div>{xCenter.toFixed(2)}</div>
+            <NumberInput
+              value={xCenter}
+              onCommit={(nextCenter) =>
+                updateScene({
+                  xRange: [nextCenter - xSpan / 2, nextCenter + xSpan / 2],
+                })
+              }
+            />
           </div>
 
           <div>
@@ -325,7 +332,14 @@ export function LeftPanel() {
                 });
               }}
             />
-            <div>{yCenter.toFixed(2)}</div>
+            <NumberInput
+              value={yCenter}
+              onCommit={(nextCenter) =>
+                updateScene({
+                  yRange: [nextCenter - ySpan / 2, nextCenter + ySpan / 2],
+                })
+              }
+            />
           </div>
 
           <div>

@@ -77,6 +77,10 @@ function exportPng() {
     a.click();
   };
 
+  image.onerror = () => {
+    console.error("PNG export failed");
+  };
+
   image.src = `data:image/svg+xml;charset=utf-8,${encodeURIComponent(source)}`;
 }
 

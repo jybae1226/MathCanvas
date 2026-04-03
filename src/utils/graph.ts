@@ -1,5 +1,5 @@
 import { compile } from "mathjs";
-import type { MathNode } from "mathjs";
+
 import type {
   Function2DObject,
   Line2DObject,
@@ -11,15 +11,47 @@ export type PlotPoint = {
   y: number | null;
 };
 
-const compiledCache = new Map<string, MathNode["compile"] extends (...args: any[]) => infer R ? R : any>();
+type CompiledExpression = {
+  evaluate: (scope: Record<string, unknown>) => unknown;
+};
 
-function getCompiled(expression: string) {
+const compiledCache = new Map<string, CompiledExpression>();
+
+function getCompiled(expression: string): CompiledExpression {
   const cached = compiledCache.get(expression);
   if (cached) return cached;
 
-  const compiled = compile(expression);
+  const compiled = compile(expression) as unknown as CompiledExpression;
   compiledCache.set(expression, compiled);
   return compiled;
+}
+
+function normalizeExplicitFunctionExpression(expression: string): string {
+  const trimmed = expression.trim();
+  if (!trimmed) return "";
+
+  if (!trimmed.includes("=")) return trimmed;
+
+  const parts = trimmed.split("=");
+  if (parts.length !== 2) return trimmed;
+
+  const left = parts[0].trim().replace(/\s+/g, "");
+  const right = parts[1].trim();
+
+  if (left === "y") return right;
+
+  return trimmed;
+}
+
+function isImplicitExpression(expression: string): boolean {
+  const trimmed = expression.trim();
+  if (!trimmed.includes("=")) return false;
+
+  const parts = trimmed.split("=");
+  if (parts.length !== 2) return false;
+
+  const left = parts[0].trim().replace(/\s+/g, "");
+  return left !== "y";
 }
 
 export const sampleFunctionPoints = (
@@ -27,9 +59,10 @@ export const sampleFunctionPoints = (
   domain: [number, number],
   samples: number,
 ): PlotPoint[] => {
-  if (!expression.trim()) return [];
+  const normalized = normalizeExplicitFunctionExpression(expression);
+  if (!normalized || normalized.includes("=")) return [];
 
-  const compiled = getCompiled(expression);
+  const compiled = getCompiled(normalized);
   const [minX, maxX] = domain;
   const pts: PlotPoint[] = [];
 
@@ -94,15 +127,12 @@ export const buildFunctionPath = (
 
 function parseImplicitExpression(expression: string): string {
   const trimmed = expression.trim();
-
   if (!trimmed) return "";
 
-  if (trimmed.includes("=")) {
-    const [left, right] = trimmed.split("=");
-    return `(${left}) - (${right})`;
-  }
+  if (!isImplicitExpression(trimmed)) return "";
 
-  return trimmed;
+  const [left, right] = trimmed.split("=");
+  return `(${left}) - (${right})`;
 }
 
 function getImplicitEvaluator(expression: string) {
@@ -114,7 +144,9 @@ function getImplicitEvaluator(expression: string) {
     return (x: number, y: number): number | null => {
       try {
         const result = compiled.evaluate({ x, y });
-        return typeof result === "number" && Number.isFinite(result) ? result : null;
+        return typeof result === "number" && Number.isFinite(result)
+          ? result
+          : null;
       } catch {
         return null;
       }
@@ -192,7 +224,11 @@ export function buildImplicitPath(
         if (a.v === null || b.v === null) continue;
 
         if ((a.v <= 0 && b.v >= 0) || (a.v >= 0 && b.v <= 0)) {
-          edges.push(interpolate(a as any, b as any));
+          edges.push(interpolate(a as { x: number; y: number; v: number }, b as {
+            x: number;
+            y: number;
+            v: number;
+          }));
         }
       }
 
@@ -218,15 +254,17 @@ function evaluateFunctionY(
   obj: Function2DObject,
   x: number,
 ): number | null {
-  if (!obj.expression.trim()) return null;
-  if (obj.expression.includes("=")) return null;
+  const normalized = normalizeExplicitFunctionExpression(obj.expression);
+
+  if (!normalized) return null;
+  if (normalized.includes("=")) return null;
 
   if (obj.domain && (x < obj.domain[0] || x > obj.domain[1])) {
     return null;
   }
 
   try {
-    const compiled = getCompiled(obj.expression);
+    const compiled = getCompiled(normalized);
     const y = compiled.evaluate({ x });
 
     if (typeof y === "number" && Number.isFinite(y)) {
