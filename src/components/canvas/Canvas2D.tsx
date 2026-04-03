@@ -1,7 +1,6 @@
 import { useMemo, useRef } from "react";
 import { useProjectStore } from "../../store/projectStore";
 import { ObjectRenderer } from "./ObjectRenderer";
-import { approximateCurveIntersections } from "../../utils/graph";
 
 function makeTicks(min: number, max: number, step: number): number[] {
   if (!Number.isFinite(step) || step <= 0) return [];
@@ -42,7 +41,6 @@ type DragMode =
   | "move"
   | "line-start"
   | "line-end"
-  | "polygon-vertex"
   | "circle-radius"
   | "region-label"
   | "pan";
@@ -54,7 +52,6 @@ export function Canvas2D() {
   const selectObject = useProjectStore((s) => s.selectObject);
   const moveObjectBy = useProjectStore((s) => s.moveObjectBy);
   const moveLineEndpointBy = useProjectStore((s) => s.moveLineEndpointBy);
-  const movePolygonVertexBy = useProjectStore((s) => s.movePolygonVertexBy);
   const moveCircleRadiusBy = useProjectStore((s) => s.moveCircleRadiusBy);
   const moveRegionLabelBy = useProjectStore((s) => s.moveRegionLabelBy);
   const beginInteractionHistory = useProjectStore(
@@ -63,9 +60,9 @@ export function Canvas2D() {
   const endInteractionHistory = useProjectStore((s) => s.endInteractionHistory);
   const activeTool = useProjectStore((s) => s.activeTool);
   const lineDraftStart = useProjectStore((s) => s.lineDraftStart);
-  const polygonDraftPoints = useProjectStore((s) => s.polygonDraftPoints);
   const handleCanvasWorldClick = useProjectStore((s) => s.handleCanvasWorldClick);
   const updateSceneDirect = useProjectStore((s) => s.updateSceneDirect);
+  const coordinateProbe = useProjectStore((s) => s.coordinateProbe);
 
   const dragRef = useRef<{
     objectId: string | null;
@@ -168,7 +165,7 @@ export function Canvas2D() {
   const yLabelEvery = Math.max(1, Math.ceil(yTicks.length / 18));
 
   const xLabels = xTicks
-    .filter((value, index) => index % xLabelEvery === 0)
+    .filter((_, index) => index % xLabelEvery === 0)
     .map((x) => (
       <text
         key={`xl-${x}`}
@@ -183,7 +180,7 @@ export function Canvas2D() {
     ));
 
   const yLabels = yTicks
-    .filter((value, index) => index % yLabelEvery === 0)
+    .filter((_, index) => index % yLabelEvery === 0)
     .map((y) => (
       <text
         key={`yl-${y}`}
@@ -199,36 +196,6 @@ export function Canvas2D() {
 
   const regionObjects = objects.filter((obj) => obj.type === "region2d");
   const otherObjects = objects.filter((obj) => obj.type !== "region2d");
-
-  const curveObjects = objects.filter(
-    (obj) => obj.type === "function2d" || obj.type === "line2d",
-  );
-
-  const intersectionPoints = useMemo(() => {
-    const result: Array<{ x: number; y: number }> = [];
-
-    for (let i = 0; i < curveObjects.length; i += 1) {
-      for (let j = i + 1; j < curveObjects.length; j += 1) {
-        const pts = approximateCurveIntersections(
-          curveObjects[i],
-          curveObjects[j],
-          xRange,
-          1200,
-        );
-        result.push(...pts);
-      }
-    }
-
-    const unique: Array<{ x: number; y: number }> = [];
-    for (const p of result) {
-      const exists = unique.some(
-        (q) => Math.abs(q.x - p.x) < 1e-3 && Math.abs(q.y - p.y) < 1e-3,
-      );
-      if (!exists) unique.push(p);
-    }
-
-    return unique;
-  }, [curveObjects, xRange]);
 
   return (
     <div className="canvas-wrap">
@@ -263,7 +230,10 @@ export function Canvas2D() {
             wy = snapValue(wy, yTickStep);
           }
 
-          if ((activeTool === "line" || activeTool === "polygon") && isBackground) {
+          if (
+            (activeTool === "line" || activeTool === "coordinate") &&
+            isBackground
+          ) {
             handleCanvasWorldClick(wx, wy);
             return;
           }
@@ -333,12 +303,6 @@ export function Canvas2D() {
             return;
           }
 
-          if (mode === "polygon-vertex") {
-            const vertexIndex = dragRef.current.meta ?? 0;
-            movePolygonVertexBy(currentId, vertexIndex, dx, dy);
-            return;
-          }
-
           if (mode === "circle-radius") {
             moveCircleRadiusBy(currentId, dx, dy);
             return;
@@ -386,27 +350,41 @@ export function Canvas2D() {
       >
         <defs>
           <marker
-            id="line-arrow"
-            markerWidth="8"
-            markerHeight="8"
-            refX="7"
-            refY="4"
+            id="line-arrow-open"
+            markerWidth="10"
+            markerHeight="10"
+            refX="8"
+            refY="5"
             orient="auto"
             markerUnits="strokeWidth"
           >
-            <path d="M 0 0 L 8 4 L 0 8 z" fill="currentColor" />
+            <path
+              d="M 1 1 L 8 5 L 1 9"
+              fill="none"
+              stroke="context-stroke"
+              strokeWidth="1.5"
+              strokeLinecap="round"
+              strokeLinejoin="round"
+            />
           </marker>
 
           <marker
-            id="axis-arrow"
-            markerWidth="8"
-            markerHeight="8"
-            refX="7"
-            refY="4"
+            id="axis-arrow-open"
+            markerWidth="10"
+            markerHeight="10"
+            refX="8"
+            refY="5"
             orient="auto"
             markerUnits="strokeWidth"
           >
-            <path d="M 0 0 L 8 4 L 0 8 z" fill="#666" />
+            <path
+              d="M 1 1 L 8 5 L 1 9"
+              fill="none"
+              stroke="#666"
+              strokeWidth="1.5"
+              strokeLinecap="round"
+              strokeLinejoin="round"
+            />
           </marker>
         </defs>
 
@@ -436,7 +414,7 @@ export function Canvas2D() {
                 y2={axisY}
                 stroke="#666"
                 strokeWidth={1.5}
-                markerEnd="url(#axis-arrow)"
+                markerEnd="url(#axis-arrow-open)"
               />
             )}
 
@@ -448,7 +426,7 @@ export function Canvas2D() {
                 y2={offsetY}
                 stroke="#666"
                 strokeWidth={1.5}
-                markerEnd="url(#axis-arrow)"
+                markerEnd="url(#axis-arrow-open)"
               />
             )}
 
@@ -495,49 +473,26 @@ export function Canvas2D() {
           />
         )}
 
-        {polygonDraftPoints.length > 0 && (
-          <>
-            <polyline
-              points={polygonDraftPoints
-                .map((p) => `${toScreenX(p.x)},${toScreenY(p.y)}`)
-                .join(" ")}
-              fill="none"
-              stroke="#ff9800"
-              strokeWidth={2}
-              strokeDasharray="6 4"
-            />
-            {polygonDraftPoints.map((p, idx) => (
-              <circle
-                key={`draft-${idx}`}
-                cx={toScreenX(p.x)}
-                cy={toScreenY(p.y)}
-                r={4}
-                fill="#ff9800"
-              />
-            ))}
-          </>
-        )}
-
-        {intersectionPoints.map((p, idx) => (
-          <g key={`intersection-${idx}`}>
+        {coordinateProbe && (
+          <g>
             <circle
-              cx={toScreenX(p.x)}
-              cy={toScreenY(p.y)}
-              r={4}
-              fill="#d32f2f"
+              cx={toScreenX(coordinateProbe.x)}
+              cy={toScreenY(coordinateProbe.y)}
+              r={5}
+              fill="#2563eb"
               stroke="#ffffff"
               strokeWidth={1.5}
             />
             <text
-              x={toScreenX(p.x) + 6}
-              y={toScreenY(p.y) - 6}
-              fontSize={11}
-              fill="#b91c1c"
+              x={toScreenX(coordinateProbe.x) + 8}
+              y={toScreenY(coordinateProbe.y) - 8}
+              fontSize={12}
+              fill="#1d4ed8"
             >
-              ({p.x.toFixed(2)}, {p.y.toFixed(2)})
+              ({coordinateProbe.x.toFixed(3)}, {coordinateProbe.y.toFixed(3)})
             </text>
           </g>
-        ))}
+        )}
 
         {regionObjects.map((object) => (
           <ObjectRenderer
@@ -603,10 +558,11 @@ export function Canvas2D() {
 
         {captionText && (
           <text
-            x={16}
+            x={width / 2}
             y={height + captionHeight / 2 + captionFontSize / 3}
             fontSize={captionFontSize}
             fill={captionColor}
+            textAnchor="middle"
           >
             {captionText}
           </text>
@@ -614,4 +570,4 @@ export function Canvas2D() {
       </svg>
     </div>
   );
-} 
+}

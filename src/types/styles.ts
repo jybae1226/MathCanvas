@@ -5,10 +5,13 @@ export type RGBA = {
   a: number;
 };
 
+export type LineStyle = "solid" | "dashed" | "dotted" | "double";
+
 export type StrokeStyle = {
   color: RGBA;
   width: number;
   dashArray?: number[];
+  lineStyle?: LineStyle;
 };
 
 export type FillStyle = {
@@ -28,6 +31,7 @@ export const defaultStroke = (): StrokeStyle => ({
   color: { r: 30, g: 30, b: 30, a: 1 },
   width: 2,
   dashArray: [],
+  lineStyle: "solid",
 });
 
 export const defaultFill = (): FillStyle => ({
@@ -69,4 +73,4 @@ export const hexToRgba = (hex: string, alpha = 1): RGBA => {
 export const rgbaToHex = (rgba: RGBA): string => {
   const toHex = (v: number) => v.toString(16).padStart(2, "0");
   return `#${toHex(rgba.r)}${toHex(rgba.g)}${toHex(rgba.b)}`;
-}; 
+};

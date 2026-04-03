@@ -1,11 +1,9 @@
 import type { PointerEvent as ReactPointerEvent } from "react";
-import katex from "katex";
 import type { LabelPosition, SceneObject } from "../../types/objects";
 import { rgbaToCss } from "../../types/styles";
 import {
   buildFunctionPath,
   buildImplicitPath,
-  buildPolygonPath,
   buildRegionPath,
   sampleFunctionPoints,
 } from "../../utils/graph";
@@ -14,7 +12,6 @@ type DragTarget =
   | "move"
   | "line-start"
   | "line-end"
-  | "polygon-vertex"
   | "circle-radius"
   | "region-label";
 
@@ -56,6 +53,61 @@ function getLabelOffset(position: LabelPosition) {
     default:
       return { dx: 8, dy: 16, anchor: "start" as const };
   }
+}
+
+function getStrokeDashArray(object: Extract<SceneObject, { stroke: any }>) {
+  const style = object.stroke.lineStyle ?? "solid";
+  if (style === "dashed") return "10 6";
+  if (style === "dotted") return "2 6";
+  return (object.stroke.dashArray ?? []).join(" ");
+}
+
+function getDoubleLineSegments(
+  x1: number,
+  y1: number,
+  x2: number,
+  y2: number,
+  gap = 3,
+) {
+  const dx = x2 - x1;
+  const dy = y2 - y1;
+  const length = Math.hypot(dx, dy);
+
+  if (length < 1e-6) {
+    return [
+      { x1, y1, x2, y2 },
+      { x1, y1, x2, y2 },
+    ];
+  }
+
+  const px = (-dy / length) * gap;
+  const py = (dx / length) * gap;
+
+  return [
+    { x1: x1 + px, y1: y1 + py, x2: x2 + px, y2: y2 + py },
+    { x1: x1 - px, y1: y1 - py, x2: x2 - px, y2: y2 - py },
+  ];
+}
+
+function latexToDisplayText(latex: string) {
+  return latex
+    .replace(/\\cdot/g, "·")
+    .replace(/\\times/g, "×")
+    .replace(/\\div/g, "÷")
+    .replace(/\\pi/g, "π")
+    .replace(/\\theta/g, "θ")
+    .replace(/\\alpha/g, "α")
+    .replace(/\\beta/g, "β")
+    .replace(/\\gamma/g, "γ")
+    .replace(/\\Delta/g, "Δ")
+    .replace(/\\sqrt\{([^}]*)\}/g, "√($1)")
+    .replace(/\\int/g, "∫")
+    .replace(/\\sum/g, "∑")
+    .replace(/\\,/g, " ")
+    .replace(/\\left/g, "")
+    .replace(/\\right/g, "")
+    .replace(/[{}]/g, "")
+    .trim();
 }
 
 export function ObjectRenderer({
@@ -171,6 +223,10 @@ export function ObjectRenderer({
     const y1 = toScreenY(object.y1);
     const x2 = toScreenX(object.x2);
     const y2 = toScreenY(object.y2);
+    const strokeColor = rgbaToCss(object.stroke.color);
+    const dashArray = getStrokeDashArray(object);
+    const isDouble = (object.stroke.lineStyle ?? "solid") === "double";
+    const doubleSegments = getDoubleLineSegments(x1, y1, x2, y2);
 
     return (
       <g
@@ -178,16 +234,33 @@ export function ObjectRenderer({
         onPointerDown={(e) => onPointerDown(e, object.id, "move")}
         style={{ cursor: "pointer" }}
       >
-        <line
-          x1={x1}
-          y1={y1}
-          x2={x2}
-          y2={y2}
-          stroke={rgbaToCss(object.stroke.color)}
-          strokeWidth={object.stroke.width}
-          strokeDasharray={(object.stroke.dashArray ?? []).join(" ")}
-          markerEnd={object.arrowEnd ? "url(#line-arrow)" : undefined}
-        />
+        {isDouble ? (
+          <>
+            {doubleSegments.map((seg, index) => (
+              <line
+                key={index}
+                x1={seg.x1}
+                y1={seg.y1}
+                x2={seg.x2}
+                y2={seg.y2}
+                stroke={strokeColor}
+                strokeWidth={object.stroke.width}
+                markerEnd={object.arrowEnd ? "url(#line-arrow-open)" : undefined}
+              />
+            ))}
+          </>
+        ) : (
+          <line
+            x1={x1}
+            y1={y1}
+            x2={x2}
+            y2={y2}
+            stroke={strokeColor}
+            strokeWidth={object.stroke.width}
+            strokeDasharray={dashArray}
+            markerEnd={object.arrowEnd ? "url(#line-arrow-open)" : undefined}
+          />
+        )}
 
         {isSelected && (
           <>
@@ -288,60 +361,16 @@ export function ObjectRenderer({
     );
   }
 
-  if (object.type === "polygon2d") {
-    const d = buildPolygonPath(object, toScreenX, toScreenY);
-
-    return (
-      <g
-        onClick={() => onSelect(object.id)}
-        onPointerDown={(e) => onPointerDown(e, object.id, "move")}
-        style={{ cursor: "pointer" }}
-      >
-        <path
-          d={d}
-          stroke={rgbaToCss(object.stroke.color)}
-          strokeWidth={object.stroke.width}
-          fill={object.fill.enabled ? rgbaToCss(object.fill.color) : "none"}
-        />
-        {isSelected && (
-          <>
-            <path
-              d={d}
-              stroke="#ff9800"
-              strokeWidth={object.stroke.width + 3}
-              fill="none"
-              strokeOpacity={0.35}
-            />
-            {object.points.map((p, index) => (
-              <circle
-                key={index}
-                cx={toScreenX(p.x)}
-                cy={toScreenY(p.y)}
-                r={6}
-                fill="#ffffff"
-                stroke="#ff9800"
-                strokeWidth={2}
-                onPointerDown={(e) => {
-                  e.stopPropagation();
-                  onPointerDown(e, object.id, "polygon-vertex", index);
-                }}
-                style={{ cursor: "grab" }}
-              />
-            ))}
-          </>
-        )}
-      </g>
-    );
-  }
-
   if (object.type === "function2d") {
+    if (!object.expression.trim()) return null;
+
     if (object.expression.includes("=")) {
       const d = buildImplicitPath(
         object.expression,
         currentXRange,
         currentYRange,
-        120,
-        120,
+        220,
+        220,
         toScreenX,
         toScreenY,
       );
@@ -389,7 +418,7 @@ export function ObjectRenderer({
           fill="none"
           stroke={rgbaToCss(object.stroke.color)}
           strokeWidth={object.stroke.width}
-          strokeDasharray={(object.stroke.dashArray ?? []).join(" ")}
+          strokeDasharray={getStrokeDashArray(object)}
         />
         {isSelected && d && (
           <path
@@ -439,15 +468,10 @@ export function ObjectRenderer({
   }
 
   if (object.type === "formula2d") {
-    const html = katex.renderToString(object.latex, {
-      throwOnError: false,
-      displayMode: false,
-      output: "html",
-    });
-
     const fontPx = object.textStyle.fontSize;
     const anchorX = toScreenX(object.x);
     const anchorY = toScreenY(object.y);
+    const displayText = latexToDisplayText(object.latex);
 
     return (
       <g
@@ -455,25 +479,15 @@ export function ObjectRenderer({
         onPointerDown={(e) => onPointerDown(e, object.id, "move")}
         style={{ cursor: "move" }}
       >
-        <foreignObject
+        <text
           x={anchorX}
-          y={anchorY - fontPx}
-          width={320}
-          height={fontPx * 2.2}
-          overflow="visible"
+          y={anchorY}
+          fill={rgbaToCss(object.textStyle.color)}
+          fontSize={fontPx}
+          fontFamily={"Cambria Math, STIX Two Math, Times New Roman, serif"}
         >
-          <div
-            style={{
-              color: rgbaToCss(object.textStyle.color),
-              fontSize: `${fontPx}px`,
-              lineHeight: 1.1,
-              display: "inline-block",
-              whiteSpace: "nowrap",
-              userSelect: "none",
-            }}
-            dangerouslySetInnerHTML={{ __html: html }}
-          />
-        </foreignObject>
+          {displayText}
+        </text>
 
         {isSelected && (
           <circle
@@ -491,4 +505,4 @@ export function ObjectRenderer({
   }
 
   return null;
-} 
+}

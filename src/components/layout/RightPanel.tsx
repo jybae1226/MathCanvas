@@ -1,11 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
 import { useProjectStore } from "../../store/projectStore";
-import {
-  approximateCurveIntersections,
-  approximateRegionArea,
-  polygonArea,
-  polygonPerimeter,
-} from "../../utils/graph";
 import { rgbaToHex } from "../../types/styles";
 import type { LabelPosition } from "../../types/objects";
 
@@ -71,6 +65,7 @@ export function RightPanel() {
   const updateObjectName = useProjectStore((s) => s.updateObjectName);
   const updateStrokeColor = useProjectStore((s) => s.updateStrokeColor);
   const updateStrokeWidth = useProjectStore((s) => s.updateStrokeWidth);
+  const updateLineStyle = useProjectStore((s) => s.updateLineStyle);
 
   const updateTextContent = useProjectStore((s) => s.updateTextContent);
   const updateFormulaContent = useProjectStore((s) => s.updateFormulaContent);
@@ -105,82 +100,12 @@ export function RightPanel() {
   const updateRegionLabelColor = useProjectStore((s) => s.updateRegionLabelColor);
   const updateRegionLabelSize = useProjectStore((s) => s.updateRegionLabelSize);
 
-  const updateObject = useProjectStore((s) => s.updateObject);
   const deleteSelectedObject = useProjectStore((s) => s.deleteSelectedObject);
 
   const selected = useMemo(
     () => objects.find((obj) => obj.id === selectedObjectId) ?? null,
     [objects, selectedObjectId],
   );
-
-  const selectedMeasurement = useMemo(() => {
-    if (!selected) return null;
-
-    if (selected.type === "line2d") {
-      return {
-        label: "Length",
-        value: Math.hypot(selected.x2 - selected.x1, selected.y2 - selected.y1),
-      };
-    }
-
-    if (selected.type === "circle2d") {
-      return {
-        label: "Area / Circumference",
-        value: `${(Math.PI * selected.radius * selected.radius).toFixed(4)} / ${(2 * Math.PI * selected.radius).toFixed(4)}`,
-      };
-    }
-
-    if (selected.type === "polygon2d") {
-      return {
-        label: "Area / Perimeter",
-        value: `${polygonArea(selected.points).toFixed(4)} / ${polygonPerimeter(selected.points).toFixed(4)}`,
-      };
-    }
-
-    if (selected.type === "region2d") {
-      const curveA = objects.find((obj) => obj.id === selected.curveAId);
-      const curveB = objects.find((obj) => obj.id === selected.curveBId);
-
-      if (!curveA || !curveB) return null;
-
-      return {
-        label: "Approx. Area",
-        value: approximateRegionArea(
-          curveA,
-          curveB,
-          selected.xStart,
-          selected.xEnd,
-          selected.samples,
-        ).toFixed(4),
-      };
-    }
-
-    return null;
-  }, [selected, objects]);
-
-  const intersections = useMemo(() => {
-    if (!selected) return [];
-
-    if (selected.type !== "function2d" && selected.type !== "line2d") {
-      return [];
-    }
-
-    const candidates = objects.filter(
-      (obj) =>
-        obj.id !== selected.id &&
-        (obj.type === "function2d" || obj.type === "line2d"),
-    );
-
-    return candidates.flatMap((obj) =>
-      approximateCurveIntersections(selected, obj, scene.xRange, 1200).map(
-        (p) => ({
-          otherName: obj.name,
-          x: p.x,
-          y: p.y,
-        }),
-      ),
-    );
-  }, [selected, objects, scene.xRange]);
 
   return (
     <aside
@@ -211,22 +136,6 @@ export function RightPanel() {
             <label>Type</label>
             <div>{selected.type}</div>
           </div>
-
-          {selectedMeasurement && (
-            <div
-              style={{
-                padding: "10px 12px",
-                background: "#f8fafc",
-                border: "1px solid #e2e8f0",
-                borderRadius: 8,
-              }}
-            >
-              <strong>{selectedMeasurement.label}:</strong>{" "}
-              {typeof selectedMeasurement.value === "number"
-                ? selectedMeasurement.value.toFixed(4)
-                : selectedMeasurement.value}
-            </div>
-          )}
 
           {selected.type === "point2d" && (
             <>
@@ -294,6 +203,7 @@ export function RightPanel() {
                     updatePointRadius(selected.id, Number(e.target.value))
                   }
                 />
+                <div>{selected.radius}</div>
               </div>
             </>
           )}
@@ -321,18 +231,41 @@ export function RightPanel() {
                 }}
               >
                 <label>Width</label>
-                <input
-                  type="range"
-                  min={1}
-                  max={10}
-                  step={1}
-                  value={selected.stroke.width}
-                  onChange={(e) =>
-                    updateStrokeWidth(selected.id, Number(e.target.value))
-                  }
-                />
+                <div style={{ flex: 1 }}>
+                  <input
+                    type="range"
+                    min={1}
+                    max={10}
+                    step={1}
+                    value={selected.stroke.width}
+                    onChange={(e) =>
+                      updateStrokeWidth(selected.id, Number(e.target.value))
+                    }
+                  />
+                  <div>{selected.stroke.width}</div>
+                </div>
               </div>
             </>
+          )}
+
+          {selected.type === "line2d" && (
+            <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
+              <label>Line Style</label>
+              <select
+                value={selected.stroke.lineStyle ?? "solid"}
+                onChange={(e) =>
+                  updateLineStyle(
+                    selected.id,
+                    e.target.value as "solid" | "dashed" | "dotted" | "double",
+                  )
+                }
+              >
+                <option value="solid">solid</option>
+                <option value="dashed">dashed</option>
+                <option value="dotted">dotted</option>
+                <option value="double">double</option>
+              </select>
+            </div>
           )}
 
           {selected.type === "circle2d" && (
@@ -382,93 +315,6 @@ export function RightPanel() {
             </>
           )}
 
-          {selected.type === "polygon2d" && (
-            <>
-              <label style={{ display: "flex", alignItems: "center", gap: 8 }}>
-                <input
-                  type="checkbox"
-                  checked={selected.fill.enabled}
-                  onChange={(e) =>
-                    updateShapeFillEnabled(selected.id, e.target.checked)
-                  }
-                />
-                Fill Interior
-              </label>
-
-              <div
-                style={{ display: "flex", justifyContent: "space-between" }}
-              >
-                <label>Fill Color</label>
-                <input
-                  type="color"
-                  value={rgbaToHex(selected.fill.color)}
-                  onChange={(e) =>
-                    updateShapeFillColor(selected.id, e.target.value)
-                  }
-                />
-              </div>
-
-              <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
-                <label>Vertices</label>
-                {selected.points.map((p, index) => (
-                  <div
-                    key={index}
-                    style={{
-                      display: "flex",
-                      gap: 8,
-                      alignItems: "center",
-                    }}
-                  >
-                    <div style={{ flex: 1 }}>
-                      <NumberInput
-                        value={p.x}
-                        onCommit={(next) => {
-                          const nextPoints = selected.points.map((pt, i) =>
-                            i === index ? { ...pt, x: next } : pt,
-                          );
-                          updateObject(selected.id, { points: nextPoints } as any);
-                        }}
-                      />
-                    </div>
-                    <div style={{ flex: 1 }}>
-                      <NumberInput
-                        value={p.y}
-                        onCommit={(next) => {
-                          const nextPoints = selected.points.map((pt, i) =>
-                            i === index ? { ...pt, y: next } : pt,
-                          );
-                          updateObject(selected.id, { points: nextPoints } as any);
-                        }}
-                      />
-                    </div>
-                    <button
-                      onClick={() => {
-                        if (selected.points.length <= 3) return;
-                        const nextPoints = selected.points.filter((_, i) => i !== index);
-                        updateObject(selected.id, { points: nextPoints } as any);
-                      }}
-                    >
-                      -
-                    </button>
-                  </div>
-                ))}
-
-                <button
-                  onClick={() => {
-                    const last = selected.points[selected.points.length - 1];
-                    const nextPoints = [
-                      ...selected.points,
-                      { x: last.x + 1, y: last.y + 1 },
-                    ];
-                    updateObject(selected.id, { points: nextPoints } as any);
-                  }}
-                >
-                  + Add Vertex
-                </button>
-              </div>
-            </>
-          )}
-
           {selected.type === "function2d" && (
             <>
               <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
@@ -479,7 +325,12 @@ export function RightPanel() {
                   onChange={(e) =>
                     updateFunctionExpression(selected.id, e.target.value)
                   }
+                  placeholder="예: sin(x), x^2, x^2 + y^2 = 4"
                 />
+              </div>
+
+              <div style={{ fontSize: 12, color: "#555" }}>
+                음함수는 예를 들어 <code>x^2 + y^2 = 4</code>처럼 입력하면 됩니다.
               </div>
 
               <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
@@ -524,47 +375,7 @@ export function RightPanel() {
                   </div>
                 </div>
               )}
-
-              {intersections.length > 0 && (
-                <div
-                  style={{
-                    padding: "10px 12px",
-                    background: "#f8fafc",
-                    border: "1px solid #e2e8f0",
-                    borderRadius: 8,
-                  }}
-                >
-                  <strong>Intersections</strong>
-                  <div style={{ marginTop: 8, display: "flex", flexDirection: "column", gap: 6 }}>
-                    {intersections.map((p, idx) => (
-                      <div key={idx}>
-                        with <strong>{p.otherName}</strong>: ({p.x.toFixed(4)}, {p.y.toFixed(4)})
-                      </div>
-                    ))}
-                  </div>
-                </div>
-              )}
             </>
-          )}
-
-          {selected.type === "line2d" && intersections.length > 0 && (
-            <div
-              style={{
-                padding: "10px 12px",
-                background: "#f8fafc",
-                border: "1px solid #e2e8f0",
-                borderRadius: 8,
-              }}
-            >
-              <strong>Intersections</strong>
-              <div style={{ marginTop: 8, display: "flex", flexDirection: "column", gap: 6 }}>
-                {intersections.map((p, idx) => (
-                  <div key={idx}>
-                    with <strong>{p.otherName}</strong>: ({p.x.toFixed(4)}, {p.y.toFixed(4)})
-                  </div>
-                ))}
-              </div>
-            </div>
           )}
 
           {selected.type === "text2d" && (
@@ -601,16 +412,19 @@ export function RightPanel() {
                 }}
               >
                 <label>Font Size</label>
-                <input
-                  type="range"
-                  min={10}
-                  max={72}
-                  step={1}
-                  value={selected.textStyle.fontSize}
-                  onChange={(e) =>
-                    updateTextSize(selected.id, Number(e.target.value))
-                  }
-                />
+                <div style={{ flex: 1 }}>
+                  <input
+                    type="range"
+                    min={10}
+                    max={72}
+                    step={1}
+                    value={selected.textStyle.fontSize}
+                    onChange={(e) =>
+                      updateTextSize(selected.id, Number(e.target.value))
+                    }
+                  />
+                  <div>{selected.textStyle.fontSize}</div>
+                </div>
               </div>
             </>
           )}
@@ -618,7 +432,7 @@ export function RightPanel() {
           {selected.type === "formula2d" && (
             <>
               <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
-                <label>LaTeX</label>
+                <label>Formula Text</label>
                 <input
                   type="text"
                   value={selected.latex}
@@ -649,16 +463,19 @@ export function RightPanel() {
                 }}
               >
                 <label>Font Size</label>
-                <input
-                  type="range"
-                  min={10}
-                  max={72}
-                  step={1}
-                  value={selected.textStyle.fontSize}
-                  onChange={(e) =>
-                    updateTextSize(selected.id, Number(e.target.value))
-                  }
-                />
+                <div style={{ flex: 1 }}>
+                  <input
+                    type="range"
+                    min={10}
+                    max={72}
+                    step={1}
+                    value={selected.textStyle.fontSize}
+                    onChange={(e) =>
+                      updateTextSize(selected.id, Number(e.target.value))
+                    }
+                  />
+                  <div>{selected.textStyle.fontSize}</div>
+                </div>
               </div>
             </>
           )}
@@ -686,16 +503,19 @@ export function RightPanel() {
                 }}
               >
                 <label>Opacity</label>
-                <input
-                  type="range"
-                  min={0}
-                  max={1}
-                  step={0.01}
-                  value={selected.fill.color.a}
-                  onChange={(e) =>
-                    updateRegionOpacity(selected.id, Number(e.target.value))
-                  }
-                />
+                <div style={{ flex: 1 }}>
+                  <input
+                    type="range"
+                    min={0}
+                    max={1}
+                    step={0.01}
+                    value={selected.fill.color.a}
+                    onChange={(e) =>
+                      updateRegionOpacity(selected.id, Number(e.target.value))
+                    }
+                  />
+                  <div>{selected.fill.color.a.toFixed(2)}</div>
+                </div>
               </div>
 
               <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
@@ -763,16 +583,19 @@ export function RightPanel() {
                 }}
               >
                 <label>Text Size</label>
-                <input
-                  type="range"
-                  min={10}
-                  max={48}
-                  step={1}
-                  value={selected.labelStyle.fontSize}
-                  onChange={(e) =>
-                    updateRegionLabelSize(selected.id, Number(e.target.value))
-                  }
-                />
+                <div style={{ flex: 1 }}>
+                  <input
+                    type="range"
+                    min={10}
+                    max={48}
+                    step={1}
+                    value={selected.labelStyle.fontSize}
+                    onChange={(e) =>
+                      updateRegionLabelSize(selected.id, Number(e.target.value))
+                    }
+                  />
+                  <div>{selected.labelStyle.fontSize}</div>
+                </div>
               </div>
             </>
           )}
@@ -794,4 +617,4 @@ export function RightPanel() {
       )}
     </aside>
   );
-} 
+}

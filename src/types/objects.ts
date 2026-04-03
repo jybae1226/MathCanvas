@@ -49,13 +49,6 @@ export type Circle2DObject = BaseObject & {
   showCenter: boolean;
 };
 
-export type Polygon2DObject = BaseObject & {
-  type: "polygon2d";
-  points: Array<{ x: number; y: number }>;
-  stroke: StrokeStyle;
-  fill: FillStyle;
-};
-
 export type Function2DObject = BaseObject & {
   type: "function2d";
   expression: string;
@@ -98,7 +91,6 @@ export type SceneObject =
   | Point2DObject
   | Line2DObject
   | Circle2DObject
-  | Polygon2DObject
   | Function2DObject
   | Text2DObject
   | Formula2DObject
@@ -125,4 +117,4 @@ export type ProjectState = {
   scene: ProjectScene;
   objects: SceneObject[];
   selectedObjectId: string | null;
-}; 
+};

@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useProjectStore } from "../../store/projectStore";
 
 function NumberInput({
@@ -51,12 +51,12 @@ export function LeftPanel() {
   const addPoint = useProjectStore((s) => s.addPoint);
   const addCircle = useProjectStore((s) => s.addCircle);
   const startLineTool = useProjectStore((s) => s.startLineTool);
-  const startPolygonTool = useProjectStore((s) => s.startPolygonTool);
-  const finishPolygonTool = useProjectStore((s) => s.finishPolygonTool);
+  const startCoordinateTool = useProjectStore((s) => s.startCoordinateTool);
   const addFunction = useProjectStore((s) => s.addFunction);
   const addText = useProjectStore((s) => s.addText);
   const addFormula = useProjectStore((s) => s.addFormula);
   const addRegionFill = useProjectStore((s) => s.addRegionFill);
+  const addIntersectionMarkers = useProjectStore((s) => s.addIntersectionMarkers);
 
   const objects = useProjectStore((s) => s.objects);
   const selectedObjectId = useProjectStore((s) => s.selectedObjectId);
@@ -67,15 +67,22 @@ export function LeftPanel() {
   const updateCaptionText = useProjectStore((s) => s.updateCaptionText);
   const updateCaptionFontSize = useProjectStore((s) => s.updateCaptionFontSize);
   const updateCaptionColor = useProjectStore((s) => s.updateCaptionColor);
+  const centerOrigin = useProjectStore((s) => s.centerOrigin);
 
   const activeTool = useProjectStore((s) => s.activeTool);
   const lineDraftStart = useProjectStore((s) => s.lineDraftStart);
-  const polygonDraftPoints = useProjectStore((s) => s.polygonDraftPoints);
 
-  const curveCandidates = objects.filter(
-    (obj) =>
-      obj.type === "function2d" ||
-      obj.type === "line2d",
+  const curveCandidates = useMemo(
+    () => objects.filter((obj) => obj.type === "function2d" || obj.type === "line2d"),
+    [objects],
+  );
+
+  const intersectionCandidates = useMemo(
+    () =>
+      objects.filter(
+        (obj) => obj.type === "function2d" && obj.expression.trim() && !obj.expression.includes("="),
+      ),
+    [objects],
   );
 
   const [curveAId, setCurveAId] = useState("");
@@ -83,10 +90,27 @@ export function LeftPanel() {
   const [regionXStart, setRegionXStart] = useState(scene.xRange[0]);
   const [regionXEnd, setRegionXEnd] = useState(scene.xRange[1]);
 
+  const [intersectionAId, setIntersectionAId] = useState("");
+  const [intersectionBId, setIntersectionBId] = useState("");
+
   useEffect(() => {
     if (!curveAId && curveCandidates[0]) setCurveAId(curveCandidates[0].id);
     if (!curveBId && curveCandidates[1]) setCurveBId(curveCandidates[1].id);
   }, [curveCandidates, curveAId, curveBId]);
+
+  useEffect(() => {
+    if (!intersectionAId && intersectionCandidates[0]) {
+      setIntersectionAId(intersectionCandidates[0].id);
+    }
+    if (!intersectionBId && intersectionCandidates[1]) {
+      setIntersectionBId(intersectionCandidates[1].id);
+    }
+  }, [intersectionCandidates, intersectionAId, intersectionBId]);
+
+  const xCenter = (scene.xRange[0] + scene.xRange[1]) / 2;
+  const yCenter = (scene.yRange[0] + scene.yRange[1]) / 2;
+  const xSpan = scene.xRange[1] - scene.xRange[0];
+  const ySpan = scene.yRange[1] - scene.yRange[0];
 
   return (
     <aside
@@ -103,19 +127,12 @@ export function LeftPanel() {
 
         <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
           <button onClick={addPoint}>+ Point</button>
-          <button onClick={startLineTool}>
-            + Arrow Line (캔버스에서 2점 클릭)
-          </button>
+          <button onClick={startLineTool}>+ Arrow</button>
           <button onClick={addCircle}>+ Circle</button>
-          <button onClick={startPolygonTool}>
-            + Polygon (점 클릭 후 Enter 완료)
-          </button>
-          {activeTool === "polygon" && (
-            <button onClick={finishPolygonTool}>Finish Polygon</button>
-          )}
           <button onClick={addFunction}>+ Function / Implicit Curve</button>
           <button onClick={addText}>+ Text</button>
           <button onClick={addFormula}>+ Formula</button>
+          <button onClick={startCoordinateTool}>+ Coordinate</button>
         </div>
 
         <div style={{ marginTop: 12, fontSize: 13, color: "#555" }}>
@@ -125,9 +142,9 @@ export function LeftPanel() {
               {lineDraftStart ? "두 번째 점을 클릭하세요. (Esc 취소)" : "첫 번째 점을 클릭하세요. (Esc 취소)"}
             </div>
           )}
-          {activeTool === "polygon" && (
+          {activeTool === "coordinate" && (
             <div style={{ marginTop: 4 }}>
-              현재 점 개수: {polygonDraftPoints.length} (Enter 완료 / Esc 취소)
+              캔버스를 클릭하면 좌표가 표시됩니다.
             </div>
           )}
           <div style={{ marginTop: 8 }}>
@@ -135,6 +152,53 @@ export function LeftPanel() {
             <br />
             Pan: 빈 공간 드래그
           </div>
+        </div>
+      </section>
+
+      <section style={{ marginTop: 24 }}>
+        <h3>Intersections</h3>
+
+        <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
+          <div>
+            <label style={{ display: "block", marginBottom: 6 }}>Function A</label>
+            <select
+              value={intersectionAId}
+              onChange={(e) => setIntersectionAId(e.target.value)}
+              style={{ width: "100%", padding: "8px 10px" }}
+            >
+              <option value="">선택</option>
+              {intersectionCandidates.map((obj) => (
+                <option key={obj.id} value={obj.id}>
+                  {obj.name}
+                </option>
+              ))}
+            </select>
+          </div>
+
+          <div>
+            <label style={{ display: "block", marginBottom: 6 }}>Function B</label>
+            <select
+              value={intersectionBId}
+              onChange={(e) => setIntersectionBId(e.target.value)}
+              style={{ width: "100%", padding: "8px 10px" }}
+            >
+              <option value="">선택</option>
+              {intersectionCandidates.map((obj) => (
+                <option key={obj.id} value={obj.id}>
+                  {obj.name}
+                </option>
+              ))}
+            </select>
+          </div>
+
+          <button
+            onClick={() => {
+              if (!intersectionAId || !intersectionBId || intersectionAId === intersectionBId) return;
+              addIntersectionMarkers(intersectionAId, intersectionBId);
+            }}
+          >
+            + Create Intersections
+          </button>
         </div>
       </section>
 
@@ -226,6 +290,44 @@ export function LeftPanel() {
             Snap to Grid
           </label>
 
+          <button onClick={centerOrigin}>원점 중앙으로</button>
+
+          <div>
+            <label style={{ display: "block", marginBottom: 6 }}>X Pan</label>
+            <input
+              type="range"
+              min={-100}
+              max={100}
+              step={0.1}
+              value={xCenter}
+              onChange={(e) => {
+                const nextCenter = Number(e.target.value);
+                updateScene({
+                  xRange: [nextCenter - xSpan / 2, nextCenter + xSpan / 2],
+                });
+              }}
+            />
+            <div>{xCenter.toFixed(2)}</div>
+          </div>
+
+          <div>
+            <label style={{ display: "block", marginBottom: 6 }}>Y Pan</label>
+            <input
+              type="range"
+              min={-100}
+              max={100}
+              step={0.1}
+              value={yCenter}
+              onChange={(e) => {
+                const nextCenter = Number(e.target.value);
+                updateScene({
+                  yRange: [nextCenter - ySpan / 2, nextCenter + ySpan / 2],
+                });
+              }}
+            />
+            <div>{yCenter.toFixed(2)}</div>
+          </div>
+
           <div>
             <label style={{ display: "block", marginBottom: 6 }}>X Range</label>
             <div style={{ display: "flex", gap: 8 }}>
@@ -304,6 +406,7 @@ export function LeftPanel() {
               value={scene.captionFontSize}
               onChange={(e) => updateCaptionFontSize(Number(e.target.value))}
             />
+            <div>{scene.captionFontSize}</div>
           </div>
 
           <div>
@@ -338,4 +441,4 @@ export function LeftPanel() {
       </section>
     </aside>
   );
-} 
+}

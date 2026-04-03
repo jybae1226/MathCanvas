@@ -17,9 +17,9 @@ function getCanvasSvgElement(): SVGSVGElement | null {
   return document.getElementById("math-diagram-svg") as SVGSVGElement | null;
 }
 
-function exportSvg() {
+function getSerializedSvg() {
   const svgElement = getCanvasSvgElement();
-  if (!svgElement) return;
+  if (!svgElement) return null;
 
   const serializer = new XMLSerializer();
   let source = serializer.serializeToString(svgElement);
@@ -31,28 +31,25 @@ function exportSvg() {
     );
   }
 
-  downloadTextFile("math-diagram.svg", source, "image/svg+xml;charset=utf-8");
+  return { svgElement, source };
+}
+
+function exportSvg() {
+  const payload = getSerializedSvg();
+  if (!payload) return;
+
+  downloadTextFile(
+    "math-diagram.svg",
+    payload.source,
+    "image/svg+xml;charset=utf-8",
+  );
 }
 
 function exportPng() {
-  const svgElement = getCanvasSvgElement();
-  if (!svgElement) return;
+  const payload = getSerializedSvg();
+  if (!payload) return;
 
-  const serializer = new XMLSerializer();
-  let source = serializer.serializeToString(svgElement);
-
-  if (!source.includes('xmlns="http://www.w3.org/2000/svg"')) {
-    source = source.replace(
-      "<svg",
-      '<svg xmlns="http://www.w3.org/2000/svg"',
-    );
-  }
-
-  const svgBlob = new Blob([source], {
-    type: "image/svg+xml;charset=utf-8",
-  });
-
-  const url = URL.createObjectURL(svgBlob);
+  const { svgElement, source } = payload;
   const image = new Image();
 
   image.onload = () => {
@@ -60,41 +57,27 @@ function exportPng() {
     const height = Number(svgElement.getAttribute("height") ?? 672);
 
     const canvas = document.createElement("canvas");
-    canvas.width = width;
-    canvas.height = height;
+    const scale = 2;
+
+    canvas.width = width * scale;
+    canvas.height = height * scale;
 
     const ctx = canvas.getContext("2d");
-    if (!ctx) {
-      URL.revokeObjectURL(url);
-      return;
-    }
+    if (!ctx) return;
 
+    ctx.scale(scale, scale);
     ctx.fillStyle = "#ffffff";
     ctx.fillRect(0, 0, width, height);
     ctx.drawImage(image, 0, 0, width, height);
 
-    canvas.toBlob((blob) => {
-      if (!blob) {
-        URL.revokeObjectURL(url);
-        return;
-      }
-
-      const pngUrl = URL.createObjectURL(blob);
-      const a = document.createElement("a");
-      a.href = pngUrl;
-      a.download = "math-diagram.png";
-      a.click();
-
-      URL.revokeObjectURL(pngUrl);
-      URL.revokeObjectURL(url);
-    }, "image/png");
+    const pngUrl = canvas.toDataURL("image/png");
+    const a = document.createElement("a");
+    a.href = pngUrl;
+    a.download = "math-diagram.png";
+    a.click();
   };
 
-  image.onerror = () => {
-    URL.revokeObjectURL(url);
-  };
-
-  image.src = url;
+  image.src = `data:image/svg+xml;charset=utf-8,${encodeURIComponent(source)}`;
 }
 
 export function Topbar() {
@@ -104,9 +87,7 @@ export function Topbar() {
   const undo = useProjectStore((s) => s.undo);
   const redo = useProjectStore((s) => s.redo);
   const deleteSelectedObject = useProjectStore((s) => s.deleteSelectedObject);
-  const setActiveTool = useProjectStore((s) => s.setActiveTool);
   const cancelDraftTool = useProjectStore((s) => s.cancelDraftTool);
-  const finishPolygonTool = useProjectStore((s) => s.finishPolygonTool);
   const activeTool = useProjectStore((s) => s.activeTool);
   const historyPastLength = useProjectStore((s) => s.historyPast.length);
   const historyFutureLength = useProjectStore((s) => s.historyFuture.length);
@@ -146,10 +127,6 @@ export function Topbar() {
       if (event.key === "Escape") {
         cancelDraftTool();
       }
-
-      if (event.key === "Enter" && activeTool === "polygon") {
-        finishPolygonTool();
-      }
     };
 
     window.addEventListener("keydown", onKeyDown);
@@ -158,8 +135,6 @@ export function Topbar() {
     activeTool,
     cancelDraftTool,
     deleteSelectedObject,
-    finishPolygonTool,
-    setActiveTool,
   ]);
 
   return (
@@ -199,4 +174,4 @@ export function Topbar() {
       />
     </header>
   );
-} 
+}

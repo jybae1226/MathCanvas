@@ -9,8 +9,10 @@ import {
   defaultStroke,
   defaultTextStyle,
   hexToRgba,
+  type LineStyle,
 } from "../types/styles";
 import { makeId } from "../utils/ids";
+import { approximateCurveIntersections } from "../utils/graph";
 
 type HistorySnapshot = {
   scene: ProjectState["scene"];
@@ -18,14 +20,13 @@ type HistorySnapshot = {
   selectedObjectId: ProjectState["selectedObjectId"];
 };
 
-type ToolMode = "select" | "line" | "polygon";
+type ToolMode = "select" | "line" | "coordinate";
 
 type ProjectActions = {
   addPoint: () => void;
   addCircle: () => void;
   startLineTool: () => void;
-  startPolygonTool: () => void;
-  finishPolygonTool: () => void;
+  startCoordinateTool: () => void;
   addFunction: () => void;
   addText: () => void;
   addFormula: () => void;
@@ -35,6 +36,7 @@ type ProjectActions = {
     xStart: number,
     xEnd: number,
   ) => void;
+  addIntersectionMarkers: (curveAId: string, curveBId: string) => void;
 
   setActiveTool: (tool: ToolMode) => void;
   cancelDraftTool: () => void;
@@ -46,6 +48,7 @@ type ProjectActions = {
 
   updateStrokeColor: (id: string, colorHex: string) => void;
   updateStrokeWidth: (id: string, width: number) => void;
+  updateLineStyle: (id: string, lineStyle: LineStyle) => void;
 
   updateTextContent: (id: string, text: string) => void;
   updateFormulaContent: (id: string, latex: string) => void;
@@ -60,6 +63,7 @@ type ProjectActions = {
   updateCaptionText: (text: string) => void;
   updateCaptionFontSize: (fontSize: number) => void;
   updateCaptionColor: (color: string) => void;
+  centerOrigin: () => void;
 
   updatePointLabel: (id: string, label: string) => void;
   updatePointFilled: (id: string, filled: boolean) => void;
@@ -89,12 +93,6 @@ type ProjectActions = {
     dx: number,
     dy: number,
   ) => void;
-  movePolygonVertexBy: (
-    id: string,
-    vertexIndex: number,
-    dx: number,
-    dy: number,
-  ) => void;
   moveCircleRadiusBy: (id: string, dx: number, dy: number) => void;
   moveRegionLabelBy: (id: string, dx: number, dy: number) => void;
 
@@ -117,8 +115,8 @@ type ProjectStore = ProjectState &
     historyFuture: HistorySnapshot[];
     activeTool: ToolMode;
     lineDraftStart: { x: number; y: number } | null;
-    polygonDraftPoints: Array<{ x: number; y: number }>;
     interactionSnapshot: HistorySnapshot | null;
+    coordinateProbe: { x: number; y: number } | null;
   };
 
 const initialState: ProjectState = {
@@ -174,8 +172,8 @@ export const useProjectStore = create<ProjectStore>((set, get) => ({
   historyFuture: [],
   activeTool: "select",
   lineDraftStart: null,
-  polygonDraftPoints: [],
   interactionSnapshot: null,
+  coordinateProbe: null,
 
   addPoint: () =>
     set((state) =>
@@ -202,12 +200,11 @@ export const useProjectStore = create<ProjectStore>((set, get) => ({
               },
               label: "A",
               showLabel: true,
-              labelPosition: "top-right",
+              labelPosition: "top",
             },
           ],
           activeTool: "select",
           lineDraftStart: null,
-          polygonDraftPoints: [],
         };
       }),
     ),
@@ -231,11 +228,11 @@ export const useProjectStore = create<ProjectStore>((set, get) => ({
               radius: 2,
               stroke: {
                 ...defaultStroke(),
-                color: { r: 0, g: 102, b: 204, a: 1 },
+                color: { r: 0, g: 0, b: 0, a: 1 },
               },
               fill: {
                 enabled: false,
-                color: { r: 0, g: 102, b: 204, a: 0.12 },
+                color: { r: 0, g: 0, b: 0, a: 0.12 },
               },
               showCenter: false,
             },
@@ -248,54 +245,15 @@ export const useProjectStore = create<ProjectStore>((set, get) => ({
     set(() => ({
       activeTool: "line",
       lineDraftStart: null,
-      polygonDraftPoints: [],
       selectedObjectId: null,
     })),
 
-  startPolygonTool: () =>
+  startCoordinateTool: () =>
     set(() => ({
-      activeTool: "polygon",
+      activeTool: "coordinate",
       lineDraftStart: null,
-      polygonDraftPoints: [],
       selectedObjectId: null,
     })),
-
-  finishPolygonTool: () =>
-    set((state) => {
-      if (state.polygonDraftPoints.length < 3) {
-        return {
-          activeTool: "select" as ToolMode,
-          polygonDraftPoints: [],
-        };
-      }
-
-      const id = makeId("polygon");
-
-      return withHistory(state, () => ({
-        activeTool: "select" as ToolMode,
-        selectedObjectId: id,
-        polygonDraftPoints: [],
-        objects: [
-          ...state.objects,
-          {
-            id,
-            name: "Polygon",
-            type: "polygon2d",
-            visible: true,
-            locked: false,
-            points: state.polygonDraftPoints,
-            stroke: {
-              ...defaultStroke(),
-              color: { r: 153, g: 51, b: 204, a: 1 },
-            },
-            fill: {
-              enabled: true,
-              color: { r: 153, g: 51, b: 204, a: 0.12 },
-            },
-          },
-        ],
-      }));
-    }),
 
   addFunction: () =>
     set((state) =>
@@ -311,18 +269,17 @@ export const useProjectStore = create<ProjectStore>((set, get) => ({
               type: "function2d",
               visible: true,
               locked: false,
-              expression: "x^2 / 4",
+              expression: "",
               domain: null,
-              samples: 600,
+              samples: 800,
               stroke: {
                 ...defaultStroke(),
-                color: { r: 40, g: 90, b: 210, a: 1 },
+                color: { r: 0, g: 0, b: 0, a: 1 },
               },
             },
           ],
           activeTool: "select",
           lineDraftStart: null,
-          polygonDraftPoints: [],
         };
       }),
     ),
@@ -349,7 +306,6 @@ export const useProjectStore = create<ProjectStore>((set, get) => ({
           ],
           activeTool: "select",
           lineDraftStart: null,
-          polygonDraftPoints: [],
         };
       }),
     ),
@@ -370,7 +326,7 @@ export const useProjectStore = create<ProjectStore>((set, get) => ({
               locked: false,
               x: 0,
               y: 0,
-              latex: "\\int_0^1 x^2\\,dx",
+              latex: "\\int_0^1 x^2 dx",
               textStyle: {
                 ...defaultTextStyle(),
                 fontSize: 24,
@@ -379,7 +335,6 @@ export const useProjectStore = create<ProjectStore>((set, get) => ({
           ],
           activeTool: "select",
           lineDraftStart: null,
-          polygonDraftPoints: [],
         };
       }),
     ),
@@ -420,11 +375,59 @@ export const useProjectStore = create<ProjectStore>((set, get) => ({
       }),
     ),
 
+  addIntersectionMarkers: (curveAId, curveBId) =>
+    set((state) =>
+      withHistory(state, () => {
+        const curveA = state.objects.find((obj) => obj.id === curveAId);
+        const curveB = state.objects.find((obj) => obj.id === curveBId);
+
+        if (!curveA || !curveB) return {};
+        if (curveA.type !== "function2d" || curveB.type !== "function2d") return {};
+        if (curveA.expression.includes("=") || curveB.expression.includes("=")) return {};
+
+        const intersections = approximateCurveIntersections(
+          curveA,
+          curveB,
+          state.scene.xRange,
+          2000,
+        );
+
+        if (intersections.length === 0) return {};
+
+        const createdObjects = intersections.map((p, index) => ({
+          id: makeId("point"),
+          name: `Intersection ${index + 1}`,
+          type: "point2d" as const,
+          visible: true,
+          locked: false,
+          x: p.x,
+          y: p.y,
+          radius: 5,
+          stroke: {
+            ...defaultStroke(),
+            color: { r: 220, g: 38, b: 38, a: 1 },
+          },
+          fill: {
+            ...defaultFill(),
+            enabled: true,
+            color: { r: 220, g: 38, b: 38, a: 1 },
+          },
+          label: `(${p.x.toFixed(3)}, ${p.y.toFixed(3)})`,
+          showLabel: true,
+          labelPosition: "top-right" as LabelPosition,
+        }));
+
+        return {
+          objects: [...state.objects, ...createdObjects],
+          selectedObjectId: createdObjects[0]?.id ?? null,
+        };
+      }),
+    ),
+
   setActiveTool: (tool) =>
     set(() => ({
       activeTool: tool,
       lineDraftStart: null,
-      polygonDraftPoints: [],
       selectedObjectId: tool === "select" ? get().selectedObjectId : null,
     })),
 
@@ -432,7 +435,6 @@ export const useProjectStore = create<ProjectStore>((set, get) => ({
     set(() => ({
       activeTool: "select",
       lineDraftStart: null,
-      polygonDraftPoints: [],
     })),
 
   handleCanvasWorldClick: (x, y) =>
@@ -452,7 +454,7 @@ export const useProjectStore = create<ProjectStore>((set, get) => ({
             ...state.objects,
             {
               id,
-              name: "Line",
+              name: "Arrow",
               type: "line2d",
               visible: true,
               locked: false,
@@ -462,7 +464,8 @@ export const useProjectStore = create<ProjectStore>((set, get) => ({
               y2: y,
               stroke: {
                 ...defaultStroke(),
-                color: { r: 200, g: 40, b: 40, a: 1 },
+                color: { r: 220, g: 38, b: 38, a: 1 },
+                lineStyle: "solid",
               },
               arrowEnd: true,
             },
@@ -472,9 +475,9 @@ export const useProjectStore = create<ProjectStore>((set, get) => ({
         }));
       }
 
-      if (state.activeTool === "polygon") {
+      if (state.activeTool === "coordinate") {
         return {
-          polygonDraftPoints: [...state.polygonDraftPoints, { x, y }],
+          coordinateProbe: { x, y },
           selectedObjectId: null,
         };
       }
@@ -489,7 +492,6 @@ export const useProjectStore = create<ProjectStore>((set, get) => ({
       selectedObjectId: id,
       activeTool: "select",
       lineDraftStart: null,
-      polygonDraftPoints: [],
     })),
 
   updateObject: (id, patch) =>
@@ -542,6 +544,23 @@ export const useProjectStore = create<ProjectStore>((set, get) => ({
             stroke: {
               ...obj.stroke,
               width,
+            },
+          };
+        }),
+      })),
+    ),
+
+  updateLineStyle: (id, lineStyle) =>
+    set((state) =>
+      withHistory(state, () => ({
+        objects: state.objects.map((obj) => {
+          if (obj.id !== id || obj.type !== "line2d") return obj;
+
+          return {
+            ...obj,
+            stroke: {
+              ...obj.stroke,
+              lineStyle,
             },
           };
         }),
@@ -678,6 +697,22 @@ export const useProjectStore = create<ProjectStore>((set, get) => ({
       })),
     ),
 
+  centerOrigin: () =>
+    set((state) =>
+      withHistory(state, () => {
+        const xSpan = state.scene.xRange[1] - state.scene.xRange[0];
+        const ySpan = state.scene.yRange[1] - state.scene.yRange[0];
+
+        return {
+          scene: {
+            ...state.scene,
+            xRange: [-xSpan / 2, xSpan / 2],
+            yRange: [-ySpan / 2, ySpan / 2],
+          },
+        };
+      }),
+    ),
+
   updatePointLabel: (id, label) =>
     set((state) =>
       withHistory(state, () => ({
@@ -768,10 +803,7 @@ export const useProjectStore = create<ProjectStore>((set, get) => ({
     set((state) =>
       withHistory(state, () => ({
         objects: state.objects.map((obj) => {
-          if (
-            obj.id === id &&
-            (obj.type === "circle2d" || obj.type === "polygon2d")
-          ) {
+          if (obj.id === id && obj.type === "circle2d") {
             return {
               ...obj,
               fill: {
@@ -789,10 +821,7 @@ export const useProjectStore = create<ProjectStore>((set, get) => ({
     set((state) =>
       withHistory(state, () => ({
         objects: state.objects.map((obj) => {
-          if (
-            obj.id === id &&
-            (obj.type === "circle2d" || obj.type === "polygon2d")
-          ) {
+          if (obj.id === id && obj.type === "circle2d") {
             return {
               ...obj,
               fill: {
@@ -981,16 +1010,6 @@ export const useProjectStore = create<ProjectStore>((set, get) => ({
           };
         }
 
-        if (obj.type === "polygon2d") {
-          return {
-            ...obj,
-            points: obj.points.map((p) => ({
-              x: p.x + dx,
-              y: p.y + dy,
-            })),
-          };
-        }
-
         if (obj.type === "text2d" || obj.type === "formula2d") {
           return {
             ...obj,
@@ -1028,20 +1047,6 @@ export const useProjectStore = create<ProjectStore>((set, get) => ({
           ...obj,
           x2: obj.x2 + dx,
           y2: obj.y2 + dy,
-        };
-      }),
-    })),
-
-  movePolygonVertexBy: (id, vertexIndex, dx, dy) =>
-    set((state) => ({
-      objects: state.objects.map((obj) => {
-        if (obj.id !== id || obj.type !== "polygon2d") return obj;
-
-        return {
-          ...obj,
-          points: obj.points.map((p, index) =>
-            index === vertexIndex ? { x: p.x + dx, y: p.y + dy } : p,
-          ),
         };
       }),
     })),
@@ -1109,7 +1114,6 @@ export const useProjectStore = create<ProjectStore>((set, get) => ({
         selectedObjectId: parsed.selectedObjectId ?? null,
         activeTool: "select",
         lineDraftStart: null,
-        polygonDraftPoints: [],
         interactionSnapshot: null,
       })),
     );
@@ -1121,8 +1125,8 @@ export const useProjectStore = create<ProjectStore>((set, get) => ({
         ...initialState,
         activeTool: "select",
         lineDraftStart: null,
-        polygonDraftPoints: [],
         interactionSnapshot: null,
+        coordinateProbe: null,
       })),
     ),
 
@@ -1142,7 +1146,6 @@ export const useProjectStore = create<ProjectStore>((set, get) => ({
         historyFuture: [current, ...state.historyFuture],
         activeTool: "select" as ToolMode,
         lineDraftStart: null,
-        polygonDraftPoints: [],
         interactionSnapshot: null,
       };
     }),
@@ -1163,8 +1166,7 @@ export const useProjectStore = create<ProjectStore>((set, get) => ({
         historyFuture: state.historyFuture.slice(1),
         activeTool: "select" as ToolMode,
         lineDraftStart: null,
-        polygonDraftPoints: [],
         interactionSnapshot: null,
       };
     }),
-})); 
+}));

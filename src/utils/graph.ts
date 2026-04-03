@@ -1,8 +1,8 @@
 import { compile } from "mathjs";
+import type { MathNode } from "mathjs";
 import type {
   Function2DObject,
   Line2DObject,
-  Polygon2DObject,
   SceneObject,
 } from "../types/objects";
 
@@ -11,12 +11,25 @@ export type PlotPoint = {
   y: number | null;
 };
 
+const compiledCache = new Map<string, MathNode["compile"] extends (...args: any[]) => infer R ? R : any>();
+
+function getCompiled(expression: string) {
+  const cached = compiledCache.get(expression);
+  if (cached) return cached;
+
+  const compiled = compile(expression);
+  compiledCache.set(expression, compiled);
+  return compiled;
+}
+
 export const sampleFunctionPoints = (
   expression: string,
   domain: [number, number],
   samples: number,
 ): PlotPoint[] => {
-  const compiled = compile(expression);
+  if (!expression.trim()) return [];
+
+  const compiled = getCompiled(expression);
   const [minX, maxX] = domain;
   const pts: PlotPoint[] = [];
 
@@ -80,19 +93,32 @@ export const buildFunctionPath = (
 };
 
 function parseImplicitExpression(expression: string): string {
-  if (expression.includes("=")) {
-    const [left, right] = expression.split("=");
+  const trimmed = expression.trim();
+
+  if (!trimmed) return "";
+
+  if (trimmed.includes("=")) {
+    const [left, right] = trimmed.split("=");
     return `(${left}) - (${right})`;
   }
 
-  return expression;
+  return trimmed;
 }
 
-function implicitValue(expression: string, x: number, y: number): number | null {
+function getImplicitEvaluator(expression: string) {
+  const parsed = parseImplicitExpression(expression);
+  if (!parsed) return null;
+
   try {
-    const compiled = compile(parseImplicitExpression(expression));
-    const result = compiled.evaluate({ x, y });
-    return typeof result === "number" && Number.isFinite(result) ? result : null;
+    const compiled = getCompiled(parsed);
+    return (x: number, y: number): number | null => {
+      try {
+        const result = compiled.evaluate({ x, y });
+        return typeof result === "number" && Number.isFinite(result) ? result : null;
+      } catch {
+        return null;
+      }
+    };
   } catch {
     return null;
   }
@@ -122,6 +148,9 @@ export function buildImplicitPath(
   toScreenX: (x: number) => number,
   toScreenY: (y: number) => number,
 ): string {
+  const evaluator = getImplicitEvaluator(expression);
+  if (!evaluator) return "";
+
   const [xMin, xMax] = xRange;
   const [yMin, yMax] = yRange;
   const dx = (xMax - xMin) / resolutionX;
@@ -135,10 +164,10 @@ export function buildImplicitPath(
       const y0 = yMin + j * dy;
       const y1 = y0 + dy;
 
-      const p00 = { x: x0, y: y0, v: implicitValue(expression, x0, y0) };
-      const p10 = { x: x1, y: y0, v: implicitValue(expression, x1, y0) };
-      const p11 = { x: x1, y: y1, v: implicitValue(expression, x1, y1) };
-      const p01 = { x: x0, y: y1, v: implicitValue(expression, x0, y1) };
+      const p00 = { x: x0, y: y0, v: evaluator(x0, y0) };
+      const p10 = { x: x1, y: y0, v: evaluator(x1, y0) };
+      const p11 = { x: x1, y: y1, v: evaluator(x1, y1) };
+      const p01 = { x: x0, y: y1, v: evaluator(x0, y1) };
 
       if ([p00.v, p10.v, p11.v, p01.v].some((v) => v === null)) continue;
 
@@ -189,6 +218,7 @@ function evaluateFunctionY(
   obj: Function2DObject,
   x: number,
 ): number | null {
+  if (!obj.expression.trim()) return null;
   if (obj.expression.includes("=")) return null;
 
   if (obj.domain && (x < obj.domain[0] || x > obj.domain[1])) {
@@ -196,7 +226,7 @@ function evaluateFunctionY(
   }
 
   try {
-    const compiled = compile(obj.expression);
+    const compiled = getCompiled(obj.expression);
     const y = compiled.evaluate({ x });
 
     if (typeof y === "number" && Number.isFinite(y)) {
@@ -279,90 +309,6 @@ export function buildRegionPath(
   return commands.join(" ");
 }
 
-export function approximateRegionArea(
-  curveA: SceneObject,
-  curveB: SceneObject,
-  xStart: number,
-  xEnd: number,
-  samples: number,
-): number {
-  const minX = Math.min(xStart, xEnd);
-  const maxX = Math.max(xStart, xEnd);
-  const dx = (maxX - minX) / samples;
-  let area = 0;
-
-  for (let i = 0; i < samples; i += 1) {
-    const x0 = minX + i * dx;
-    const x1 = x0 + dx;
-    const yA0 = evaluateCurveY(curveA, x0);
-    const yB0 = evaluateCurveY(curveB, x0);
-    const yA1 = evaluateCurveY(curveA, x1);
-    const yB1 = evaluateCurveY(curveB, x1);
-
-    if (
-      yA0 === null ||
-      yB0 === null ||
-      yA1 === null ||
-      yB1 === null
-    ) {
-      continue;
-    }
-
-    const h0 = Math.abs(yA0 - yB0);
-    const h1 = Math.abs(yA1 - yB1);
-    area += ((h0 + h1) * 0.5) * dx;
-  }
-
-  return area;
-}
-
-export function buildPolygonPath(
-  polygon: Polygon2DObject,
-  toScreenX: (x: number) => number,
-  toScreenY: (y: number) => number,
-): string {
-  if (polygon.points.length < 2) return "";
-
-  const commands = polygon.points.map((p, index) => {
-    const sx = toScreenX(p.x);
-    const sy = toScreenY(p.y);
-    return `${index === 0 ? "M" : "L"} ${sx} ${sy}`;
-  });
-
-  commands.push("Z");
-  return commands.join(" ");
-}
-
-export function polygonArea(points: Array<{ x: number; y: number }>): number {
-  if (points.length < 3) return 0;
-
-  let sum = 0;
-
-  for (let i = 0; i < points.length; i += 1) {
-    const a = points[i];
-    const b = points[(i + 1) % points.length];
-    sum += a.x * b.y - b.x * a.y;
-  }
-
-  return Math.abs(sum) / 2;
-}
-
-export function polygonPerimeter(
-  points: Array<{ x: number; y: number }>,
-): number {
-  if (points.length < 2) return 0;
-
-  let total = 0;
-
-  for (let i = 0; i < points.length; i += 1) {
-    const a = points[i];
-    const b = points[(i + 1) % points.length];
-    total += Math.hypot(b.x - a.x, b.y - a.y);
-  }
-
-  return total;
-}
-
 export function approximateCurveIntersections(
   a: SceneObject,
   b: SceneObject,
@@ -420,4 +366,4 @@ export function approximateCurveIntersections(
   }
 
   return unique;
-} 
+}
