@@ -18,6 +18,10 @@ function getCanvasSvgElement(): SVGSVGElement | null {
   return document.getElementById("math-diagram-svg") as SVGSVGElement | null;
 }
 
+function fontSizeCompensation(height: number) {
+  return height * 0.08;
+}
+
 async function buildExportableSvg() {
   const svgElement = getCanvasSvgElement();
   if (!svgElement) return null;
@@ -52,10 +56,14 @@ async function buildExportableSvg() {
       });
 
       const imageNode = document.createElementNS(svgNs, "image");
-      imageNode.setAttribute("x", String(x));
-      imageNode.setAttribute("y", String(y));
-      imageNode.setAttribute("width", String(width));
-      imageNode.setAttribute("height", String(height));
+      const scaleFix = 0.78;
+      const xFix = 0;
+      const yFix = fontSizeCompensation(height);
+
+      imageNode.setAttribute("x", String(x + xFix));
+      imageNode.setAttribute("y", String(y + yFix));
+      imageNode.setAttribute("width", String(width * scaleFix));
+      imageNode.setAttribute("height", String(height * scaleFix));
       imageNode.setAttribute("href", dataUrl);
 
       node.parentNode?.replaceChild(imageNode, node);

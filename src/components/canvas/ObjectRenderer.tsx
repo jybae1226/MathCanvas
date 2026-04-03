@@ -479,8 +479,8 @@ export function ObjectRenderer({
     const fontPx = object.textStyle.fontSize;
     const anchorX = toScreenX(object.x);
     const anchorY = toScreenY(object.y);
-    const boxWidth = Math.max(240, object.latex.length * fontPx * 0.8);
-    const boxHeight = fontPx * 2.4;
+    const boxWidth = Math.max(180, object.latex.length * fontPx * 0.62);
+    const boxHeight = fontPx * 1.7;
 
     return (
       <g
@@ -490,14 +490,14 @@ export function ObjectRenderer({
       >
         <foreignObject
           x={anchorX}
-          y={anchorY - fontPx}
+          y={anchorY - fontPx * 0.95}
           width={boxWidth}
           height={boxHeight}
           overflow="visible"
           data-export-formula="true"
           data-formula-id={object.id}
           data-export-x={String(anchorX)}
-          data-export-y={String(anchorY - fontPx)}
+          data-export-y={String(anchorY - fontPx * 0.95)}
           data-export-width={String(boxWidth)}
           data-export-height={String(boxHeight)}
         >
