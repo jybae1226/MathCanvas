@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
 import { useProjectStore } from "../../store/projectStore";
+import { approximateCurveIntersections } from "../../utils/graph";
 import { rgbaToHex } from "../../types/styles";
 import type { LabelPosition } from "../../types/objects";
 
@@ -106,6 +107,34 @@ export function RightPanel() {
     () => objects.find((obj) => obj.id === selectedObjectId) ?? null,
     [objects, selectedObjectId],
   );
+
+  const intersections = useMemo(() => {
+    if (!selected) return [];
+
+    if (selected.type !== "function2d" && selected.type !== "line2d") {
+      return [];
+    }
+
+    const candidates = objects.filter(
+      (obj) =>
+        obj.id !== selected.id &&
+        (obj.type === "function2d" || obj.type === "line2d"),
+    );
+
+    return candidates.flatMap((obj) =>
+      approximateCurveIntersections(
+        selected,
+        obj,
+        scene.xRange,
+        scene.yRange,
+        900,
+      ).map((p) => ({
+        otherName: obj.name,
+        x: p.x,
+        y: p.y,
+      })),
+    );
+  }, [selected, objects, scene.xRange, scene.yRange]);
 
   return (
     <aside
@@ -249,23 +278,52 @@ export function RightPanel() {
           )}
 
           {selected.type === "line2d" && (
-            <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
-              <label>Line Style</label>
-              <select
-                value={selected.stroke.lineStyle ?? "solid"}
-                onChange={(e) =>
-                  updateLineStyle(
-                    selected.id,
-                    e.target.value as "solid" | "dashed" | "dotted" | "double",
-                  )
-                }
-              >
-                <option value="solid">solid</option>
-                <option value="dashed">dashed</option>
-                <option value="dotted">dotted</option>
-                <option value="double">double</option>
-              </select>
-            </div>
+            <>
+              <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
+                <label>Line Style</label>
+                <select
+                  value={selected.stroke.lineStyle ?? "solid"}
+                  onChange={(e) =>
+                    updateLineStyle(
+                      selected.id,
+                      e.target.value as "solid" | "dashed" | "dotted" | "double",
+                    )
+                  }
+                >
+                  <option value="solid">solid</option>
+                  <option value="dashed">dashed</option>
+                  <option value="dotted">dotted</option>
+                  <option value="double">double</option>
+                </select>
+              </div>
+
+              {intersections.length > 0 && (
+                <div
+                  style={{
+                    padding: "10px 12px",
+                    background: "#f8fafc",
+                    border: "1px solid #e2e8f0",
+                    borderRadius: 8,
+                  }}
+                >
+                  <strong>Intersections</strong>
+                  <div
+                    style={{
+                      marginTop: 8,
+                      display: "flex",
+                      flexDirection: "column",
+                      gap: 6,
+                    }}
+                  >
+                    {intersections.map((p, idx) => (
+                      <div key={idx}>
+                        with <strong>{p.otherName}</strong>: ({p.x.toFixed(4)}, {p.y.toFixed(4)})
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+            </>
           )}
 
           {selected.type === "circle2d" && (
@@ -348,6 +406,33 @@ export function RightPanel() {
                   />
                   Use current viewport range
                 </label>
+
+                {intersections.length > 0 && (
+                <div
+                  style={{
+                    padding: "10px 12px",
+                    background: "#f8fafc",
+                    border: "1px solid #e2e8f0",
+                    borderRadius: 8,
+                  }}
+                >
+                  <strong>Intersections</strong>
+                  <div
+                    style={{
+                      marginTop: 8,
+                      display: "flex",
+                      flexDirection: "column",
+                      gap: 6,
+                    }}
+                  >
+                    {intersections.map((p, idx) => (
+                      <div key={idx}>
+                        with <strong>{p.otherName}</strong>: ({p.x.toFixed(4)}, {p.y.toFixed(4)})
+                      </div>
+                    ))}
+                  </div>
+                </div>
+                )}
               </div>
 
               {selected.domain !== null && (

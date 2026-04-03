@@ -21,8 +21,30 @@ function getSerializedSvg() {
   const svgElement = getCanvasSvgElement();
   if (!svgElement) return null;
 
+  const clone = svgElement.cloneNode(true) as SVGSVGElement;
+  const svgNs = "http://www.w3.org/2000/svg";
+
+  const foreignObjects = clone.querySelectorAll("foreignObject[data-export-text]");
+
+  foreignObjects.forEach((node) => {
+    const textValue = node.getAttribute("data-export-text") ?? "";
+    const x = Number(node.getAttribute("data-export-x") ?? "0");
+    const y = Number(node.getAttribute("data-export-y") ?? "0");
+    const fontSize = Number(node.getAttribute("data-export-font-size") ?? "20");
+    const fill = node.getAttribute("data-export-fill") ?? "#111";
+
+    const textNode = document.createElementNS(svgNs, "text");
+    textNode.setAttribute("x", String(x));
+    textNode.setAttribute("y", String(y));
+    textNode.setAttribute("font-size", String(fontSize));
+    textNode.setAttribute("fill", fill);
+    textNode.textContent = textValue;
+
+    node.parentNode?.replaceChild(textNode, node);
+  });
+
   const serializer = new XMLSerializer();
-  let source = serializer.serializeToString(svgElement);
+  let source = serializer.serializeToString(clone);
 
   if (!source.includes('xmlns="http://www.w3.org/2000/svg"')) {
     source = source.replace(

@@ -382,14 +382,18 @@ export const useProjectStore = create<ProjectStore>((set, get) => ({
         const curveB = state.objects.find((obj) => obj.id === curveBId);
 
         if (!curveA || !curveB) return {};
-        if (curveA.type !== "function2d" || curveB.type !== "function2d") return {};
-        if (curveA.expression.includes("=") || curveB.expression.includes("=")) return {};
+
+        const curveAOk = curveA.type === "function2d" || curveA.type === "line2d";
+        const curveBOk = curveB.type === "function2d" || curveB.type === "line2d";
+
+        if (!curveAOk || !curveBOk) return {};
 
         const intersections = approximateCurveIntersections(
           curveA,
           curveB,
           state.scene.xRange,
-          2000,
+          state.scene.yRange,
+          900,
         );
 
         if (intersections.length === 0) return {};

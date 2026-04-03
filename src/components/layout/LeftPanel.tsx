@@ -72,12 +72,11 @@ export function LeftPanel() {
   const activeTool = useProjectStore((s) => s.activeTool);
   const lineDraftStart = useProjectStore((s) => s.lineDraftStart);
 
-  const curveCandidates = useMemo(
-    () => objects.filter((obj) => obj.type === "function2d" || obj.type === "line2d"),
-    [objects],
+  const curveCandidates = objects.filter(
+    (obj) => obj.type === "function2d" || obj.type === "line2d",
   );
 
-    const intersectionCandidates = useMemo(
+  const intersectionCandidates = useMemo(
     () =>
       objects.filter(
         (obj) => obj.type === "function2d" && obj.expression.trim(),

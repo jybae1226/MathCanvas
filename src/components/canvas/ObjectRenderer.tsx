@@ -1,4 +1,5 @@
 import type { PointerEvent as ReactPointerEvent } from "react";
+import katex from "katex";
 import type { LabelPosition, SceneObject } from "../../types/objects";
 import { rgbaToCss } from "../../types/styles";
 import {
@@ -138,6 +139,7 @@ export function ObjectRenderer({
       object.samples,
       toScreenX,
       toScreenY,
+      currentYRange,
     );
 
     if (!d) return null;
@@ -369,8 +371,8 @@ export function ObjectRenderer({
         object.expression,
         currentXRange,
         currentYRange,
-        220,
-        220,
+        260,
+        260,
         toScreenX,
         toScreenY,
       );
@@ -467,7 +469,13 @@ export function ObjectRenderer({
     );
   }
 
-  if (object.type === "formula2d") {
+    if (object.type === "formula2d") {
+    const html = katex.renderToString(object.latex || "", {
+      throwOnError: false,
+      displayMode: false,
+      output: "html",
+    });
+
     const fontPx = object.textStyle.fontSize;
     const anchorX = toScreenX(object.x);
     const anchorY = toScreenY(object.y);
@@ -478,15 +486,30 @@ export function ObjectRenderer({
         onPointerDown={(e) => onPointerDown(e, object.id, "move")}
         style={{ cursor: "move" }}
       >
-        <text
+        <foreignObject
           x={anchorX}
-          y={anchorY}
-          fill={rgbaToCss(object.textStyle.color)}
-          fontSize={fontPx}
-          fontFamily={object.textStyle.fontFamily || "Arial"}
+          y={anchorY - fontPx}
+          width={Math.max(240, object.latex.length * fontPx * 0.8)}
+          height={fontPx * 2.4}
+          overflow="visible"
+          data-export-text={object.latex}
+          data-export-x={String(anchorX)}
+          data-export-y={String(anchorY)}
+          data-export-font-size={String(fontPx)}
+          data-export-fill={rgbaToCss(object.textStyle.color)}
         >
-          {object.latex}
-        </text>
+          <div
+            style={{
+              color: rgbaToCss(object.textStyle.color),
+              fontSize: `${fontPx}px`,
+              lineHeight: 1.1,
+              display: "inline-block",
+              whiteSpace: "nowrap",
+              userSelect: "none",
+            }}
+            dangerouslySetInnerHTML={{ __html: html }}
+          />
+        </foreignObject>
 
         {isSelected && (
           <circle
