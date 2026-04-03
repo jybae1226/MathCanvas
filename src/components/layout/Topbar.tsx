@@ -17,7 +17,24 @@ function getCanvasSvgElement(): SVGSVGElement | null {
   return document.getElementById("math-diagram-svg") as SVGSVGElement | null;
 }
 
-function getSerializedSvg() {
+function serializeSvgPreserveForeignObject() {
+  const svgElement = getCanvasSvgElement();
+  if (!svgElement) return null;
+
+  const serializer = new XMLSerializer();
+  let source = serializer.serializeToString(svgElement);
+
+  if (!source.includes('xmlns="http://www.w3.org/2000/svg"')) {
+    source = source.replace(
+      "<svg",
+      '<svg xmlns="http://www.w3.org/2000/svg"',
+    );
+  }
+
+  return { svgElement, source };
+}
+
+function serializeSvgForRaster() {
   const svgElement = getCanvasSvgElement();
   if (!svgElement) return null;
 
@@ -57,7 +74,7 @@ function getSerializedSvg() {
 }
 
 function exportSvg() {
-  const payload = getSerializedSvg();
+  const payload = serializeSvgPreserveForeignObject();
   if (!payload) return;
 
   downloadTextFile(
@@ -68,7 +85,7 @@ function exportSvg() {
 }
 
 function exportPng() {
-  const payload = getSerializedSvg();
+  const payload = serializeSvgForRaster();
   if (!payload) return;
 
   const { svgElement, source } = payload;
@@ -157,11 +174,7 @@ export function Topbar() {
 
     window.addEventListener("keydown", onKeyDown);
     return () => window.removeEventListener("keydown", onKeyDown);
-  }, [
-    activeTool,
-    cancelDraftTool,
-    deleteSelectedObject,
-  ]);
+  }, [activeTool, cancelDraftTool, deleteSelectedObject]);
 
   return (
     <header
