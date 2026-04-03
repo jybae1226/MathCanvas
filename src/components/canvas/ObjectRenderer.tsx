@@ -469,7 +469,7 @@ export function ObjectRenderer({
     );
   }
 
-    if (object.type === "formula2d") {
+      if (object.type === "formula2d") {
     const html = katex.renderToString(object.latex || "", {
       throwOnError: false,
       displayMode: false,
@@ -479,6 +479,8 @@ export function ObjectRenderer({
     const fontPx = object.textStyle.fontSize;
     const anchorX = toScreenX(object.x);
     const anchorY = toScreenY(object.y);
+    const boxWidth = Math.max(240, object.latex.length * fontPx * 0.8);
+    const boxHeight = fontPx * 2.4;
 
     return (
       <g
@@ -489,16 +491,18 @@ export function ObjectRenderer({
         <foreignObject
           x={anchorX}
           y={anchorY - fontPx}
-          width={Math.max(240, object.latex.length * fontPx * 0.8)}
-          height={fontPx * 2.4}
+          width={boxWidth}
+          height={boxHeight}
           overflow="visible"
-          data-export-text={object.latex}
+          data-export-formula="true"
+          data-formula-id={object.id}
           data-export-x={String(anchorX)}
-          data-export-y={String(anchorY)}
-          data-export-font-size={String(fontPx)}
-          data-export-fill={rgbaToCss(object.textStyle.color)}
+          data-export-y={String(anchorY - fontPx)}
+          data-export-width={String(boxWidth)}
+          data-export-height={String(boxHeight)}
         >
           <div
+            data-formula-source={object.id}
             style={{
               color: rgbaToCss(object.textStyle.color),
               fontSize: `${fontPx}px`,
@@ -506,6 +510,7 @@ export function ObjectRenderer({
               display: "inline-block",
               whiteSpace: "nowrap",
               userSelect: "none",
+              background: "transparent",
             }}
             dangerouslySetInnerHTML={{ __html: html }}
           />

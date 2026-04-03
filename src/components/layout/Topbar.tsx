@@ -1,4 +1,5 @@
 import { useEffect, useRef } from "react";
+import { toPng } from "html-to-image";
 import { useProjectStore } from "../../store/projectStore";
 
 function downloadTextFile(filename: string, content: string, mimeType: string) {
@@ -17,48 +18,51 @@ function getCanvasSvgElement(): SVGSVGElement | null {
   return document.getElementById("math-diagram-svg") as SVGSVGElement | null;
 }
 
-function serializeSvgPreserveForeignObject() {
-  const svgElement = getCanvasSvgElement();
-  if (!svgElement) return null;
-
-  const serializer = new XMLSerializer();
-  let source = serializer.serializeToString(svgElement);
-
-  if (!source.includes('xmlns="http://www.w3.org/2000/svg"')) {
-    source = source.replace(
-      "<svg",
-      '<svg xmlns="http://www.w3.org/2000/svg"',
-    );
-  }
-
-  return { svgElement, source };
-}
-
-function serializeSvgForRaster() {
+async function buildExportableSvg() {
   const svgElement = getCanvasSvgElement();
   if (!svgElement) return null;
 
   const clone = svgElement.cloneNode(true) as SVGSVGElement;
   const svgNs = "http://www.w3.org/2000/svg";
 
-  const foreignObjects = clone.querySelectorAll("foreignObject[data-export-text]");
+  const formulaNodes = clone.querySelectorAll(
+    'foreignObject[data-export-formula="true"]',
+  );
 
-  foreignObjects.forEach((node) => {
-    const textValue = node.getAttribute("data-export-text") ?? "";
+  for (const node of Array.from(formulaNodes)) {
+    const formulaId = node.getAttribute("data-formula-id");
     const x = Number(node.getAttribute("data-export-x") ?? "0");
     const y = Number(node.getAttribute("data-export-y") ?? "0");
-    const fontSize = Number(node.getAttribute("data-export-font-size") ?? "20");
-    const fill = node.getAttribute("data-export-fill") ?? "#111";
+    const width = Number(node.getAttribute("data-export-width") ?? "200");
+    const height = Number(node.getAttribute("data-export-height") ?? "80");
 
-    const textNode = document.createElementNS(svgNs, "text");
-    textNode.setAttribute("x", String(x));
-    textNode.setAttribute("y", String(y));
-    textNode.setAttribute("font-size", String(fontSize));
-    textNode.setAttribute("fill", fill);
-    textNode.textContent = textValue;
+    if (!formulaId) continue;
 
-    node.parentNode?.replaceChild(textNode, node);
-  });
+    const liveNode = document.querySelector(
+      `[data-formula-source="${formulaId}"]`,
+    ) as HTMLElement | null;
+
+    if (!liveNode) continue;
+
+    try {
+      const dataUrl = await toPng(liveNode, {
+        cacheBust: true,
+        backgroundColor: "rgba(0,0,0,0)",
+        pixelRatio: 2,
+      });
+
+      const imageNode = document.createElementNS(svgNs, "image");
+      imageNode.setAttribute("x", String(x));
+      imageNode.setAttribute("y", String(y));
+      imageNode.setAttribute("width", String(width));
+      imageNode.setAttribute("height", String(height));
+      imageNode.setAttribute("href", dataUrl);
+
+      node.parentNode?.replaceChild(imageNode, node);
+    } catch (error) {
+      console.error("Formula export image conversion failed:", error);
+    }
+  }
 
   const serializer = new XMLSerializer();
   let source = serializer.serializeToString(clone);
@@ -70,11 +74,18 @@ function serializeSvgForRaster() {
     );
   }
 
+  if (!source.includes('xmlns:xlink="http://www.w3.org/1999/xlink"')) {
+    source = source.replace(
+      "<svg",
+      '<svg xmlns:xlink="http://www.w3.org/1999/xlink"',
+    );
+  }
+
   return { svgElement, source };
 }
 
-function exportSvg() {
-  const payload = serializeSvgPreserveForeignObject();
+async function exportSvg() {
+  const payload = await buildExportableSvg();
   if (!payload) return;
 
   downloadTextFile(
@@ -84,8 +95,8 @@ function exportSvg() {
   );
 }
 
-function exportPng() {
-  const payload = serializeSvgForRaster();
+async function exportPng() {
+  const payload = await buildExportableSvg();
   if (!payload) return;
 
   const { svgElement, source } = payload;
@@ -200,8 +211,8 @@ export function Topbar() {
         <button onClick={redo} disabled={historyFutureLength === 0}>
           Redo
         </button>
-        <button onClick={exportSvg}>Export SVG</button>
-        <button onClick={exportPng}>Export PNG</button>
+        <button onClick={() => void exportSvg()}>Export SVG</button>
+        <button onClick={() => void exportPng()}>Export PNG</button>
       </div>
 
       <input
