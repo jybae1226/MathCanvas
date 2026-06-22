@@ -36,7 +36,7 @@ export type Line2DObject = BaseObject & {
   x2: number;
   y2: number;
   stroke: StrokeStyle;
-  arrowEnd: boolean;
+  arrowEnd: "none" | "open" | "closed" | "both";
 };
 
 export type Circle2DObject = BaseObject & {

@@ -49,6 +49,7 @@ type ProjectActions = {
   updateStrokeColor: (id: string, colorHex: string) => void;
   updateStrokeWidth: (id: string, width: number) => void;
   updateLineStyle: (id: string, lineStyle: LineStyle) => void;
+  updateLineArrow: (id: string, arrowEnd: "none" | "open" | "closed" | "both") => void;
 
   updateTextContent: (id: string, text: string) => void;
   updateFormulaContent: (id: string, latex: string) => void;
@@ -471,7 +472,7 @@ export const useProjectStore = create<ProjectStore>((set, get) => ({
                 color: { r: 220, g: 38, b: 38, a: 1 },
                 lineStyle: "solid",
               },
-              arrowEnd: true,
+              arrowEnd: "open",
             },
           ],
           selectedObjectId: id,
@@ -566,6 +567,20 @@ export const useProjectStore = create<ProjectStore>((set, get) => ({
               ...obj.stroke,
               lineStyle,
             },
+          };
+        }),
+      })),
+    ),
+
+  updateLineArrow: (id, arrowEnd) =>
+    set((state) =>
+      withHistory(state, () => ({
+        objects: state.objects.map((obj) => {
+          if (obj.id !== id || obj.type !== "line2d") return obj;
+
+          return {
+            ...obj,
+            arrowEnd,
           };
         }),
       })),

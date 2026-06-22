@@ -22,15 +22,22 @@ type XYPoint = {
 
 type CurveBranch = XYPoint[];
 
-const compiledCache = new Map<string, CompiledExpression>();
+const compiledCache = new Map<string, CompiledExpression | null>();
 
-function getCompiled(expression: string): CompiledExpression {
-  const cached = compiledCache.get(expression);
-  if (cached) return cached;
+function getCompiled(expression: string): CompiledExpression | null {
+  if (compiledCache.has(expression)) {
+    return compiledCache.get(expression) ?? null;
+  }
 
-  const compiled = compile(expression) as unknown as CompiledExpression;
-  compiledCache.set(expression, compiled);
-  return compiled;
+  try {
+    const compiled = compile(expression) as unknown as CompiledExpression;
+    compiledCache.set(expression, compiled);
+    return compiled;
+  } catch (error) {
+    compiledCache.set(expression, null);
+    console.warn(`Failed to compile expression "${expression}":`, error);
+    return null;
+  }
 }
 
 function normalizeExplicitFunctionExpression(expression: string): string {
@@ -48,6 +55,63 @@ function normalizeExplicitFunctionExpression(expression: string): string {
   if (left === "y") return right;
 
   return trimmed;
+}
+
+function isPolarExpression(expression: string): boolean {
+  const trimmed = expression.trim();
+  if (!trimmed.includes("=")) return false;
+
+  const parts = trimmed.split("=");
+  if (parts.length !== 2) return false;
+
+  const left = parts[0].trim().replace(/\s+/g, "");
+  return left === "r";
+}
+
+function getPolarAngleVariable(expression: string): string {
+  const rightSide = expression.split("=")[1]?.trim() || "";
+  if (rightSide.includes("theta")) return "theta";
+  if (rightSide.includes("t")) return "t";
+  if (rightSide.includes("angle")) return "angle";
+  return "theta";
+}
+
+export function samplePolarFunctionPoints(
+  expression: string,
+  domain: [number, number],
+  samples: number,
+): PlotPoint[] {
+  if (!isPolarExpression(expression)) return [];
+
+  const angleVar = getPolarAngleVariable(expression);
+  const rightSide = expression.split("=")[1]?.trim() || "";
+
+  const compiled = getCompiled(rightSide);
+  if (!compiled) return [];
+
+  const [minAngle, maxAngle] = domain;
+  const pts: PlotPoint[] = [];
+
+  for (let i = 0; i <= samples; i += 1) {
+    const angle = minAngle + ((maxAngle - minAngle) * i) / samples;
+
+    try {
+      const scope: Record<string, unknown> = { [angleVar]: angle };
+      const r = compiled.evaluate(scope);
+
+      if (typeof r === "number" && Number.isFinite(r) && r >= 0) {
+        const x = r * Math.cos(angle);
+        const y = r * Math.sin(angle);
+        pts.push({ x, y });
+      } else {
+        pts.push({ x: angle, y: null });
+      }
+    } catch {
+      pts.push({ x: angle, y: null });
+    }
+  }
+
+  return pts;
 }
 
 export function isImplicitExpression(expression: string): boolean {
@@ -75,22 +139,19 @@ function getImplicitEvaluator(expression: string) {
   const parsed = parseImplicitExpression(expression);
   if (!parsed) return null;
 
-  try {
-    const compiled = getCompiled(parsed);
+  const compiled = getCompiled(parsed);
+  if (!compiled) return null;
 
-    return (x: number, y: number): number | null => {
-      try {
-        const result = compiled.evaluate({ x, y });
-        return typeof result === "number" && Number.isFinite(result)
-          ? result
-          : null;
-      } catch {
-        return null;
-      }
-    };
-  } catch {
-    return null;
-  }
+  return (x: number, y: number): number | null => {
+    try {
+      const result = compiled.evaluate({ x, y });
+      return typeof result === "number" && Number.isFinite(result)
+        ? result
+        : null;
+    } catch {
+      return null;
+    }
+  };
 }
 
 export const sampleFunctionPoints = (
@@ -102,6 +163,8 @@ export const sampleFunctionPoints = (
   if (!normalized || normalized.includes("=")) return [];
 
   const compiled = getCompiled(normalized);
+  if (!compiled) return [];
+
   const [minX, maxX] = domain;
   const pts: PlotPoint[] = [];
 
@@ -471,12 +534,16 @@ export function approximateCurveIntersections(
   b: SceneObject,
   xRange: [number, number],
   yRange?: [number, number],
-  samples = 500,
+  samples = 1200,
 ): Array<{ x: number; y: number }> {
   const fallbackYRange: [number, number] = yRange ?? [-10, 10];
 
   const aBranches = buildCurveBranches(a, xRange, fallbackYRange, samples);
   const bBranches = buildCurveBranches(b, xRange, fallbackYRange, samples);
+
+  if (aBranches.length === 0 || bBranches.length === 0) {
+    return [];
+  }
 
   const points: XYPoint[] = [];
 
@@ -498,7 +565,7 @@ export function approximateCurveIntersections(
 
   const unique: XYPoint[] = [];
   for (const p of points) {
-    if (!unique.some((q) => Math.abs(q.x - p.x) < 1e-3 && Math.abs(q.y - p.y) < 1e-3)) {
+    if (!unique.some((q) => Math.abs(q.x - p.x) < 1e-2 && Math.abs(q.y - p.y) < 1e-2)) {
       unique.push(p);
     }
   }

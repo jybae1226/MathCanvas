@@ -106,8 +106,6 @@ export function LeftPanel() {
     }
   }, [intersectionCandidates, intersectionAId, intersectionBId]);
 
-  const xCenter = (scene.xRange[0] + scene.xRange[1]) / 2;
-  const yCenter = (scene.yRange[0] + scene.yRange[1]) / 2;
   const xSpan = scene.xRange[1] - scene.xRange[0];
   const ySpan = scene.yRange[1] - scene.yRange[0];
 
@@ -115,14 +113,14 @@ export function LeftPanel() {
     <aside
       style={{
         width: 360,
-        borderRight: "1px solid #ddd",
+        borderRight: "1px solid var(--color-border)",
         padding: 16,
-        background: "#fff",
+        background: "var(--color-white)",
         overflow: "auto",
       }}
     >
       <section>
-        <h3>Insert</h3>
+        <h3 style={{ margin: "0 0 12px 0", fontSize: 14, fontWeight: 600 }}>Insert</h3>
 
         <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
           <button onClick={addPoint}>+ Point</button>
@@ -134,7 +132,7 @@ export function LeftPanel() {
           <button onClick={startCoordinateTool}>+ Coordinate</button>
         </div>
 
-        <div style={{ marginTop: 12, fontSize: 13, color: "#555" }}>
+        <div style={{ marginTop: 12, fontSize: 13, color: "var(--color-text-secondary)" }}>
           Tool: <strong>{activeTool}</strong>
           {activeTool === "line" && (
             <div style={{ marginTop: 4 }}>
@@ -280,66 +278,7 @@ export function LeftPanel() {
             Show Axes
           </label>
 
-          <label style={{ display: "flex", alignItems: "center", gap: 8 }}>
-            <input
-              type="checkbox"
-              checked={scene.snapToGrid}
-              onChange={(e) => updateScene({ snapToGrid: e.target.checked })}
-            />
-            Snap to Grid
-          </label>
-
           <button onClick={centerOrigin}>원점 중앙으로</button>
-
-          <div>
-            <label style={{ display: "block", marginBottom: 6 }}>X Pan</label>
-            <input
-              type="range"
-              min={-100}
-              max={100}
-              step={0.1}
-              value={xCenter}
-              onChange={(e) => {
-                const nextCenter = Number(e.target.value);
-                updateScene({
-                  xRange: [nextCenter - xSpan / 2, nextCenter + xSpan / 2],
-                });
-              }}
-            />
-            <NumberInput
-              value={xCenter}
-              onCommit={(nextCenter) =>
-                updateScene({
-                  xRange: [nextCenter - xSpan / 2, nextCenter + xSpan / 2],
-                })
-              }
-            />
-          </div>
-
-          <div>
-            <label style={{ display: "block", marginBottom: 6 }}>Y Pan</label>
-            <input
-              type="range"
-              min={-100}
-              max={100}
-              step={0.1}
-              value={yCenter}
-              onChange={(e) => {
-                const nextCenter = Number(e.target.value);
-                updateScene({
-                  yRange: [nextCenter - ySpan / 2, nextCenter + ySpan / 2],
-                });
-              }}
-            />
-            <NumberInput
-              value={yCenter}
-              onCommit={(nextCenter) =>
-                updateScene({
-                  yRange: [nextCenter - ySpan / 2, nextCenter + ySpan / 2],
-                })
-              }
-            />
-          </div>
 
           <div>
             <label style={{ display: "block", marginBottom: 6 }}>X Range</label>

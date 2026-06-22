@@ -67,6 +67,7 @@ export function RightPanel() {
   const updateStrokeColor = useProjectStore((s) => s.updateStrokeColor);
   const updateStrokeWidth = useProjectStore((s) => s.updateStrokeWidth);
   const updateLineStyle = useProjectStore((s) => s.updateLineStyle);
+  const updateLineArrow = useProjectStore((s) => s.updateLineArrow);
 
   const updateTextContent = useProjectStore((s) => s.updateTextContent);
   const updateFormulaContent = useProjectStore((s) => s.updateFormulaContent);
@@ -294,6 +295,24 @@ export function RightPanel() {
                   <option value="dashed">dashed</option>
                   <option value="dotted">dotted</option>
                   <option value="double">double</option>
+                </select>
+              </div>
+
+              <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
+                <label>Arrow</label>
+                <select
+                  value={selected.arrowEnd}
+                  onChange={(e) =>
+                    updateLineArrow(
+                      selected.id,
+                      e.target.value as "none" | "open" | "closed" | "both",
+                    )
+                  }
+                >
+                  <option value="none">none</option>
+                  <option value="open">→ (open)</option>
+                  <option value="closed">▶ (closed)</option>
+                  <option value="both">↔ (both)</option>
                 </select>
               </div>
 
@@ -690,10 +709,13 @@ export function RightPanel() {
             style={{
               marginTop: 10,
               padding: "10px 12px",
-              border: "1px solid #d33",
-              background: "#fff5f5",
-              color: "#b00020",
+              border: "1px solid var(--color-border)",
+              background: "var(--color-danger-light)",
+              color: "var(--color-danger)",
               cursor: "pointer",
+              borderRadius: "12px",
+              fontWeight: 500,
+              transition: "all 0.2s ease",
             }}
           >
             Delete Selected

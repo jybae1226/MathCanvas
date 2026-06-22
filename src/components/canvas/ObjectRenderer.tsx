@@ -7,6 +7,7 @@ import {
   buildImplicitPath,
   buildRegionPath,
   sampleFunctionPoints,
+  samplePolarFunctionPoints,
 } from "../../utils/graph";
 
 type DragTarget =
@@ -230,6 +231,14 @@ export function ObjectRenderer({
     const isDouble = (object.stroke.lineStyle ?? "solid") === "double";
     const doubleSegments = getDoubleLineSegments(x1, y1, x2, y2);
 
+    const getMarkerUrl = (arrowType: string, isLast: boolean = true) => {
+      if (!isLast || arrowType === "none") return undefined;
+      if (arrowType === "open") return "url(#line-arrow-open)";
+      if (arrowType === "closed") return "url(#line-arrow-closed)";
+      if (arrowType === "both") return "url(#line-arrow-both)";
+      return undefined;
+    };
+
     return (
       <g
         onClick={() => onSelect(object.id)}
@@ -247,7 +256,7 @@ export function ObjectRenderer({
                 y2={seg.y2}
                 stroke={strokeColor}
                 strokeWidth={object.stroke.width}
-                markerEnd={object.arrowEnd ? "url(#line-arrow-open)" : undefined}
+                markerEnd={getMarkerUrl(object.arrowEnd, index === doubleSegments.length - 1)}
               />
             ))}
           </>
@@ -260,7 +269,7 @@ export function ObjectRenderer({
             stroke={strokeColor}
             strokeWidth={object.stroke.width}
             strokeDasharray={dashArray}
-            markerEnd={object.arrowEnd ? "url(#line-arrow-open)" : undefined}
+            markerEnd={getMarkerUrl(object.arrowEnd)}
           />
         )}
 
@@ -365,6 +374,51 @@ export function ObjectRenderer({
 
   if (object.type === "function2d") {
     if (!object.expression.trim()) return null;
+
+    const isPolarExpr = object.expression.includes("=") &&
+      object.expression.trim().split("=")[0].trim().replace(/\s+/g, "") === "r";
+
+    if (isPolarExpr) {
+      const resolvedDomain: [number, number] = [0, Math.PI * 2];
+      let d = "";
+
+      try {
+        const points = samplePolarFunctionPoints(
+          object.expression,
+          resolvedDomain,
+          object.samples,
+        );
+        const polarD = buildFunctionPath(
+          points,
+          toScreenX,
+          toScreenY,
+          viewHeight,
+        );
+        d = polarD;
+      } catch {
+        return null;
+      }
+
+      return (
+        <g onClick={() => onSelect(object.id)} style={{ cursor: "pointer" }}>
+          <path
+            d={d}
+            fill="none"
+            stroke={rgbaToCss(object.stroke.color)}
+            strokeWidth={object.stroke.width}
+          />
+          {isSelected && d && (
+            <path
+              d={d}
+              fill="none"
+              stroke="#ff9800"
+              strokeWidth={object.stroke.width + 4}
+              strokeOpacity={0.2}
+            />
+          )}
+        </g>
+      );
+    }
 
     if (object.expression.includes("=")) {
       const d = buildImplicitPath(

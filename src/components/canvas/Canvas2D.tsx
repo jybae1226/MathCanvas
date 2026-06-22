@@ -1,6 +1,7 @@
 import { useMemo, useRef } from "react";
 import { useProjectStore } from "../../store/projectStore";
 import { ObjectRenderer } from "./ObjectRenderer";
+import katex from "katex";
 
 function makeTicks(min: number, max: number, step: number): number[] {
   if (!Number.isFinite(step) || step <= 0) return [];
@@ -29,11 +30,6 @@ function formatTick(value: number, step: number): string {
 
 function clamp(value: number, min: number, max: number): number {
   return Math.min(max, Math.max(min, value));
-}
-
-function snapValue(value: number, step: number): number {
-  if (!Number.isFinite(step) || step <= 0) return value;
-  return Math.round(value / step) * step;
 }
 
 type DragMode =
@@ -225,11 +221,6 @@ export function Canvas2D() {
           let wx = toWorldXFromSvg(sx);
           let wy = toWorldYFromSvg(sy);
 
-          if (snapToGrid) {
-            wx = snapValue(wx, xTickStep);
-            wy = snapValue(wy, yTickStep);
-          }
-
           if (
             (activeTool === "line" || activeTool === "coordinate") &&
             isBackground
@@ -270,12 +261,6 @@ export function Canvas2D() {
 
           let dx = screenDxToWorld(dxPixels);
           let dy = screenDyToWorld(dyPixels);
-
-          if (snapToGrid && mode !== "pan" && mode !== "circle-radius") {
-            dx = snapValue(dx, xTickStep);
-            dy = snapValue(dy, yTickStep);
-            if (dx === 0 && dy === 0) return;
-          }
 
           if (mode === "pan") {
             updateSceneDirect({
@@ -322,7 +307,6 @@ export function Canvas2D() {
           dragRef.current.objectId = null;
           dragRef.current.mode = null;
           dragRef.current.meta = undefined;
-          endInteractionHistory();
         }}
         onWheel={(e) => {
           e.preventDefault();
@@ -360,6 +344,52 @@ export function Canvas2D() {
           >
             <path
               d="M 1 1 L 8 5 L 1 9"
+              fill="none"
+              stroke="context-stroke"
+              strokeWidth="1.5"
+              strokeLinecap="round"
+              strokeLinejoin="round"
+            />
+          </marker>
+
+          <marker
+            id="line-arrow-closed"
+            markerWidth="10"
+            markerHeight="10"
+            refX="8"
+            refY="5"
+            orient="auto"
+            markerUnits="strokeWidth"
+          >
+            <path
+              d="M 1 1 L 8 5 L 1 9 Z"
+              fill="context-stroke"
+              stroke="context-stroke"
+              strokeWidth="1.5"
+              strokeLinecap="round"
+              strokeLinejoin="round"
+            />
+          </marker>
+
+          <marker
+            id="line-arrow-both"
+            markerWidth="10"
+            markerHeight="10"
+            refX="8"
+            refY="5"
+            orient="auto"
+            markerUnits="strokeWidth"
+          >
+            <path
+              d="M 1 1 L 8 5 L 1 9"
+              fill="none"
+              stroke="context-stroke"
+              strokeWidth="1.5"
+              strokeLinecap="round"
+              strokeLinejoin="round"
+            />
+            <path
+              d="M 15 1 L 8 5 L 15 9"
               fill="none"
               stroke="context-stroke"
               strokeWidth="1.5"
@@ -431,26 +461,49 @@ export function Canvas2D() {
             )}
 
             {axisY >= offsetY && axisY <= offsetY + usedHeight && (
-              <text
-                x={offsetX + usedWidth - 12}
-                y={axisY - 8}
-                fontSize={14}
-                fill="#444"
-                textAnchor="end"
+              <foreignObject
+                x={offsetX + usedWidth - 20}
+                y={axisY - 20}
+                width={24}
+                height={24}
               >
-                x
-              </text>
+                <div
+                  style={{
+                    width: "100%",
+                    height: "100%",
+                    display: "flex",
+                    alignItems: "center",
+                    justifyContent: "center",
+                    fontSize: 14,
+                  }}
+                  dangerouslySetInnerHTML={{
+                    __html: katex.renderToString("x", { throwOnError: false }),
+                  }}
+                />
+              </foreignObject>
             )}
 
-            {axisX >= offsetX && axisX <= offsetX + usedWidth && (
-              <text
-                x={axisX + 10}
-                y={offsetY + 16}
-                fontSize={14}
-                fill="#444"
+            {axisX >= offsetX && axisX <= offsetX + usedWidth && axisX !== toScreenX(0) && (
+              <foreignObject
+                x={axisX}
+                y={offsetY + 8}
+                width={24}
+                height={24}
               >
-                y
-              </text>
+                <div
+                  style={{
+                    width: "100%",
+                    height: "100%",
+                    display: "flex",
+                    alignItems: "center",
+                    justifyContent: "center",
+                    fontSize: 14,
+                  }}
+                  dangerouslySetInnerHTML={{
+                    __html: katex.renderToString("y", { throwOnError: false }),
+                  }}
+                />
+              </foreignObject>
             )}
           </>
         )}

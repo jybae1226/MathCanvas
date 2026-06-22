@@ -205,15 +205,15 @@ export function Topbar() {
     <header
       style={{
         height: 56,
-        borderBottom: "1px solid #ddd",
+        borderBottom: "1px solid var(--color-border)",
         display: "flex",
         alignItems: "center",
         justifyContent: "space-between",
         padding: "0 16px",
-        background: "#fff",
+        background: "var(--color-white)",
       }}
     >
-      <div style={{ fontWeight: 700 }}>MathCanvas</div>
+      <div style={{ fontWeight: 700, fontSize: 18 }}>MathCanvas</div>
 
       <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
         <button onClick={resetProject}>New</button>
