@@ -1,6 +1,7 @@
 import { create } from "zustand";
 import type {
   LabelPosition,
+  Region2DObject,
   ProjectState,
   SceneObject,
 } from "../types/objects";
@@ -12,7 +13,11 @@ import {
   type LineStyle,
 } from "../types/styles";
 import { makeId } from "../utils/ids";
-import { approximateCurveIntersections } from "../utils/graph";
+import { approximateCurveIntersections } from "../utils/intersections";
+import { findCurve } from "../utils/curves";
+import { parseProject, PROJECT_VERSION } from "../utils/projectFile";
+import { isValidRange, validateScene } from "../utils/scene";
+import { AREA_COLORS, type BoundedSegment } from "../utils/boundedAreas";
 
 type HistorySnapshot = {
   scene: ProjectState["scene"];
@@ -23,6 +28,14 @@ type HistorySnapshot = {
 type ToolMode = "select" | "line" | "coordinate";
 
 type ProjectActions = {
+  addSceneObject: (object: SceneObject) => void;
+  addBoundedRegions: (
+    curveAId: string,
+    curveBId: string,
+    segments: BoundedSegment[],
+    range: [number, number],
+  ) => void;
+  removeAxisIntersections: (curveId: string, axisId: string) => void;
   addPoint: () => void;
   addCircle: () => void;
   startLineTool: () => void;
@@ -35,8 +48,19 @@ type ProjectActions = {
     curveBId: string,
     xStart: number,
     xEnd: number,
+    options?: Partial<
+      Pick<
+        Region2DObject,
+        "regionMode" | "branchA" | "branchB" | "signA" | "signB"
+      >
+    >,
   ) => void;
-  addIntersectionMarkers: (curveAId: string, curveBId: string) => void;
+  addIntersectionMarkers: (
+    curveAId: string,
+    curveBId: string,
+    linked?: boolean,
+  ) => void;
+  refreshIntersections: () => void;
 
   setActiveTool: (tool: ToolMode) => void;
   cancelDraftTool: () => void;
@@ -49,7 +73,10 @@ type ProjectActions = {
   updateStrokeColor: (id: string, colorHex: string) => void;
   updateStrokeWidth: (id: string, width: number) => void;
   updateLineStyle: (id: string, lineStyle: LineStyle) => void;
-  updateLineArrow: (id: string, arrowEnd: "none" | "open" | "closed" | "both") => void;
+  updateLineArrow: (
+    id: string,
+    arrowEnd: "none" | "open" | "closed" | "both",
+  ) => void;
 
   updateTextContent: (id: string, text: string) => void;
   updateFormulaContent: (id: string, latex: string) => void;
@@ -162,7 +189,7 @@ const withHistory = (
 
   return {
     ...nextPatch,
-    historyPast: [...state.historyPast, current],
+    historyPast: [...state.historyPast, current].slice(-100),
     historyFuture: [],
   };
 };
@@ -176,6 +203,79 @@ export const useProjectStore = create<ProjectStore>((set, get) => ({
   interactionSnapshot: null,
   coordinateProbe: null,
 
+  addSceneObject: (object) =>
+    set((state) =>
+      withHistory(state, () => ({
+        objects: [...state.objects, object],
+        selectedObjectId: object.id,
+      })),
+    ),
+  addBoundedRegions: (curveAId, curveBId, segments, range) =>
+    set((state) =>
+      withHistory(state, () => {
+        const pair = [curveAId, curveBId].sort().join("::");
+        const created: Region2DObject[] = segments
+          .filter((s) => s.area)
+          .map((s) => ({
+            id: makeId("area"),
+            name: `교점 사이 A${s.index + 1}`,
+            type: "region2d",
+            visible: true,
+            locked: false,
+            curveAId,
+            curveBId,
+            xStart: s.start.x,
+            xEnd: s.end.x,
+            samples: 400,
+            fill: {
+              enabled: true,
+              color: hexToRgba(AREA_COLORS[s.index % AREA_COLORS.length], 0.22),
+            },
+            labelText: `A${s.index + 1}`,
+            labelX: s.labelX,
+            labelY: s.labelY,
+            labelStyle: { ...defaultTextStyle(), fontSize: 16 },
+            regionMode: "between",
+            showAreaValue: true,
+            autoBounds: {
+              index: s.index,
+              searchRange: [...range],
+              anchorX: s.labelX,
+              anchorY: s.labelY,
+            },
+          }));
+        return {
+          objects: [
+            ...state.objects.filter(
+              (o) =>
+                !(
+                  o.type === "region2d" &&
+                  o.autoBounds &&
+                  [o.curveAId, o.curveBId].sort().join("::") === pair
+                ),
+            ),
+            ...created,
+          ],
+          selectedObjectId: created[0]?.id ?? state.selectedObjectId,
+          activeTool: "select",
+          lineDraftStart: null,
+        };
+      }),
+    ),
+  removeAxisIntersections: (curveId, axisId) =>
+    set((state) =>
+      withHistory(state, () => ({
+        objects: state.objects.filter(
+          (o) =>
+            !(
+              o.type === "point2d" &&
+              o.intersection?.curveAId === curveId &&
+              o.intersection.curveBId === axisId
+            ),
+        ),
+      })),
+    ),
+
   addPoint: () =>
     set((state) =>
       withHistory(state, () => {
@@ -186,7 +286,7 @@ export const useProjectStore = create<ProjectStore>((set, get) => ({
             ...state.objects,
             {
               id,
-              name: "Point",
+              name: "점",
               type: "point2d",
               visible: true,
               locked: false,
@@ -220,7 +320,7 @@ export const useProjectStore = create<ProjectStore>((set, get) => ({
             ...state.objects,
             {
               id,
-              name: "Circle",
+              name: "원",
               type: "circle2d",
               visible: true,
               locked: false,
@@ -266,11 +366,12 @@ export const useProjectStore = create<ProjectStore>((set, get) => ({
             ...state.objects,
             {
               id,
-              name: "Function",
+              name: "함수",
               type: "function2d",
               visible: true,
               locked: false,
               expression: "",
+              angleUnit: state.scene.angleUnit ?? "rad",
               domain: null,
               samples: 800,
               stroke: {
@@ -295,13 +396,13 @@ export const useProjectStore = create<ProjectStore>((set, get) => ({
             ...state.objects,
             {
               id,
-              name: "Text",
+              name: "텍스트",
               type: "text2d",
               visible: true,
               locked: false,
               x: 0,
               y: 0,
-              text: "Text",
+              text: "텍스트",
               textStyle: defaultTextStyle(),
             },
           ],
@@ -321,7 +422,7 @@ export const useProjectStore = create<ProjectStore>((set, get) => ({
             ...state.objects,
             {
               id,
-              name: "Formula",
+              name: "수식",
               type: "formula2d",
               visible: true,
               locked: false,
@@ -340,7 +441,7 @@ export const useProjectStore = create<ProjectStore>((set, get) => ({
       }),
     ),
 
-  addRegionFill: (curveAId, curveBId, xStart, xEnd) =>
+  addRegionFill: (curveAId, curveBId, xStart, xEnd, options = {}) =>
     set((state) =>
       withHistory(state, () => {
         const id = makeId("region");
@@ -350,8 +451,9 @@ export const useProjectStore = create<ProjectStore>((set, get) => ({
             ...state.objects,
             {
               id,
-              name: "Region Fill",
+              name: "영역",
               type: "region2d",
+              ...options,
               visible: true,
               locked: false,
               curveAId,
@@ -376,16 +478,20 @@ export const useProjectStore = create<ProjectStore>((set, get) => ({
       }),
     ),
 
-  addIntersectionMarkers: (curveAId, curveBId) =>
+  addIntersectionMarkers: (curveAId, curveBId, linked = false) =>
     set((state) =>
       withHistory(state, () => {
-        const curveA = state.objects.find((obj) => obj.id === curveAId);
-        const curveB = state.objects.find((obj) => obj.id === curveBId);
+        const curveA = findCurve(state.objects, curveAId);
+        const curveB = findCurve(state.objects, curveBId);
 
         if (!curveA || !curveB) return {};
 
-        const curveAOk = curveA.type === "function2d" || curveA.type === "line2d";
-        const curveBOk = curveB.type === "function2d" || curveB.type === "line2d";
+        const curveAOk = ["function2d", "line2d", "circle2d"].includes(
+          curveA.type,
+        );
+        const curveBOk = ["function2d", "line2d", "circle2d"].includes(
+          curveB.type,
+        );
 
         if (!curveAOk || !curveBOk) return {};
 
@@ -394,14 +500,13 @@ export const useProjectStore = create<ProjectStore>((set, get) => ({
           curveB,
           state.scene.xRange,
           state.scene.yRange,
-          900,
         );
 
         if (intersections.length === 0) return {};
 
         const createdObjects = intersections.map((p, index) => ({
           id: makeId("point"),
-          name: `Intersection ${index + 1}`,
+          name: `교점 ${index + 1}`,
           type: "point2d" as const,
           visible: true,
           locked: false,
@@ -420,6 +525,7 @@ export const useProjectStore = create<ProjectStore>((set, get) => ({
           label: `(${p.x.toFixed(3)}, ${p.y.toFixed(3)})`,
           showLabel: true,
           labelPosition: "top-right" as LabelPosition,
+          ...(linked ? { intersection: { curveAId, curveBId, index } } : {}),
         }));
 
         return {
@@ -428,6 +534,42 @@ export const useProjectStore = create<ProjectStore>((set, get) => ({
         };
       }),
     ),
+
+  refreshIntersections: () =>
+    set((state) => {
+      const groups = new Map<string, Array<{ x: number; y: number }>>();
+      const objects = state.objects.map((o) => {
+        if (o.type !== "point2d" || !o.intersection) return o;
+        const { curveAId, curveBId, index } = o.intersection;
+        const key = `${curveAId}:${curveBId}`;
+        if (!groups.has(key)) {
+          const a = findCurve(state.objects, curveAId),
+            b = findCurve(state.objects, curveBId);
+          groups.set(
+            key,
+            a && b
+              ? approximateCurveIntersections(
+                  a,
+                  b,
+                  state.scene.xRange,
+                  state.scene.yRange,
+                )
+              : [],
+          );
+        }
+        const p = groups.get(key)?.[index];
+        return p
+          ? {
+              ...o,
+              x: p.x,
+              y: p.y,
+              visible: true,
+              label: `(${p.x.toFixed(4)}, ${p.y.toFixed(4)})`,
+            }
+          : { ...o, visible: false };
+      });
+      return { objects };
+    }),
 
   setActiveTool: (tool) =>
     set(() => ({
@@ -459,7 +601,7 @@ export const useProjectStore = create<ProjectStore>((set, get) => ({
             ...state.objects,
             {
               id,
-              name: "Arrow",
+              name: "화살표",
               type: "line2d",
               visible: true,
               locked: false,
@@ -608,8 +750,7 @@ export const useProjectStore = create<ProjectStore>((set, get) => ({
     set((state) =>
       withHistory(state, () => ({
         objects: state.objects.map((obj) =>
-          obj.id === id &&
-          (obj.type === "text2d" || obj.type === "formula2d")
+          obj.id === id && (obj.type === "text2d" || obj.type === "formula2d")
             ? {
                 ...obj,
                 textStyle: {
@@ -626,8 +767,7 @@ export const useProjectStore = create<ProjectStore>((set, get) => ({
     set((state) =>
       withHistory(state, () => ({
         objects: state.objects.map((obj) =>
-          obj.id === id &&
-          (obj.type === "text2d" || obj.type === "formula2d")
+          obj.id === id && (obj.type === "text2d" || obj.type === "formula2d")
             ? {
                 ...obj,
                 textStyle: {
@@ -656,35 +796,52 @@ export const useProjectStore = create<ProjectStore>((set, get) => ({
 
   updateFunctionDomain: (id, domain) =>
     set((state) =>
-      withHistory(state, () => ({
-        objects: state.objects.map((obj) =>
-          obj.id === id && obj.type === "function2d"
-            ? {
-                ...obj,
-                domain,
-              }
-            : obj,
-        ),
-      })),
+      domain !== null && !isValidRange(domain)
+        ? {}
+        : withHistory(state, () => ({
+            objects: state.objects.map((obj) =>
+              obj.id === id && obj.type === "function2d"
+                ? {
+                    ...obj,
+                    domain,
+                  }
+                : obj,
+            ),
+          })),
     ),
 
   updateScene: (patch) =>
-    set((state) =>
-      withHistory(state, () => ({
-        scene: {
-          ...state.scene,
-          ...patch,
-        },
-      })),
-    ),
+    set((state) => {
+      const scene = { ...state.scene, ...patch };
+      try {
+        validateScene(scene);
+      } catch {
+        return {};
+      }
+      return withHistory(state, () => ({
+        scene,
+        ...(patch.angleUnit
+          ? {
+              objects: state.objects.map((o) =>
+                o.type === "function2d"
+                  ? { ...o, angleUnit: patch.angleUnit }
+                  : o,
+              ),
+            }
+          : {}),
+      }));
+    }),
 
   updateSceneDirect: (patch) =>
-    set((state) => ({
-      scene: {
-        ...state.scene,
-        ...patch,
-      },
-    })),
+    set((state) => {
+      const scene = { ...state.scene, ...patch };
+      try {
+        validateScene(scene);
+      } catch {
+        return {};
+      }
+      return { scene };
+    }),
 
   updateCaptionText: (captionText) =>
     set((state) =>
@@ -767,9 +924,7 @@ export const useProjectStore = create<ProjectStore>((set, get) => ({
     set((state) =>
       withHistory(state, () => ({
         objects: state.objects.map((obj) =>
-          obj.id === id && obj.type === "point2d"
-            ? { ...obj, showLabel }
-            : obj,
+          obj.id === id && obj.type === "point2d" ? { ...obj, showLabel } : obj,
         ),
       })),
     ),
@@ -895,9 +1050,7 @@ export const useProjectStore = create<ProjectStore>((set, get) => ({
     set((state) =>
       withHistory(state, () => ({
         objects: state.objects.map((obj) =>
-          obj.id === id && obj.type === "region2d"
-            ? { ...obj, xStart }
-            : obj,
+          obj.id === id && obj.type === "region2d" ? { ...obj, xStart } : obj,
         ),
       })),
     ),
@@ -906,9 +1059,7 @@ export const useProjectStore = create<ProjectStore>((set, get) => ({
     set((state) =>
       withHistory(state, () => ({
         objects: state.objects.map((obj) =>
-          obj.id === id && obj.type === "region2d"
-            ? { ...obj, xEnd }
-            : obj,
+          obj.id === id && obj.type === "region2d" ? { ...obj, xEnd } : obj,
         ),
       })),
     ),
@@ -988,20 +1139,31 @@ export const useProjectStore = create<ProjectStore>((set, get) => ({
 
       return {
         interactionSnapshot: current,
-        historyPast: [...state.historyPast, current],
-        historyFuture: [],
       };
     }),
 
   endInteractionHistory: () =>
-    set(() => ({
-      interactionSnapshot: null,
-    })),
+    set((state) => {
+      const snapshot = state.interactionSnapshot;
+      if (!snapshot) return {};
+      const changed =
+        JSON.stringify([snapshot.scene, snapshot.objects]) !==
+        JSON.stringify([state.scene, state.objects]);
+      return {
+        interactionSnapshot: null,
+        ...(changed
+          ? {
+              historyPast: [...state.historyPast, snapshot].slice(-100),
+              historyFuture: [],
+            }
+          : {}),
+      };
+    }),
 
   moveObjectBy: (id, dx, dy) =>
     set((state) => ({
       objects: state.objects.map((obj) => {
-        if (obj.id !== id) return obj;
+        if (obj.id !== id || obj.locked) return obj;
 
         if (obj.type === "point2d") {
           return {
@@ -1052,7 +1214,7 @@ export const useProjectStore = create<ProjectStore>((set, get) => ({
   moveLineEndpointBy: (id, endpoint, dx, dy) =>
     set((state) => ({
       objects: state.objects.map((obj) => {
-        if (obj.id !== id || obj.type !== "line2d") return obj;
+        if (obj.id !== id || obj.locked || obj.type !== "line2d") return obj;
 
         if (endpoint === "start") {
           return {
@@ -1073,13 +1235,12 @@ export const useProjectStore = create<ProjectStore>((set, get) => ({
   moveCircleRadiusBy: (id, dx, dy) =>
     set((state) => ({
       objects: state.objects.map((obj) => {
-        if (obj.id !== id || obj.type !== "circle2d") return obj;
+        if (obj.id !== id || obj.locked || obj.type !== "circle2d") return obj;
 
-        const delta = Math.max(Math.abs(dx), Math.abs(dy));
-        const sign = dx + dy >= 0 ? 1 : -1;
+        void dy;
         return {
           ...obj,
-          radius: Math.max(0.1, obj.radius + sign * delta),
+          radius: Math.max(0.1, obj.radius + dx),
         };
       }),
     })),
@@ -1099,11 +1260,21 @@ export const useProjectStore = create<ProjectStore>((set, get) => ({
 
   deleteSelectedObject: () =>
     set((state) => {
-      if (!state.selectedObjectId) return state;
+      if (
+        !state.selectedObjectId ||
+        state.objects.find((o) => o.id === state.selectedObjectId)?.locked
+      )
+        return state;
 
       return withHistory(state, () => ({
         objects: state.objects.filter(
-          (obj) => obj.id !== state.selectedObjectId,
+          (obj) =>
+            obj.id !== state.selectedObjectId &&
+            !(
+              obj.type === "region2d" &&
+              (obj.curveAId === state.selectedObjectId ||
+                obj.curveBId === state.selectedObjectId)
+            ),
         ),
         selectedObjectId: null,
       }));
@@ -1114,6 +1285,7 @@ export const useProjectStore = create<ProjectStore>((set, get) => ({
 
     return JSON.stringify(
       {
+        version: PROJECT_VERSION,
         scene: state.scene,
         objects: state.objects,
         selectedObjectId: state.selectedObjectId,
@@ -1124,7 +1296,7 @@ export const useProjectStore = create<ProjectStore>((set, get) => ({
   },
 
   importProjectJson: (json: string) => {
-    const parsed = JSON.parse(json) as ProjectState;
+    const parsed = parseProject(json);
 
     set((state) =>
       withHistory(state, () => ({
@@ -1134,6 +1306,7 @@ export const useProjectStore = create<ProjectStore>((set, get) => ({
         activeTool: "select",
         lineDraftStart: null,
         interactionSnapshot: null,
+        coordinateProbe: null,
       })),
     );
   },

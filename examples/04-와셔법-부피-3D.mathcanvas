@@ -1,0 +1,38 @@
+{
+  "version": 1,
+  "scene": {
+    "mode": "2d",
+    "width": 900,
+    "height": 600,
+    "captionHeight": 72,
+    "xRange": [
+      -3,
+      3
+    ],
+    "yRange": [
+      -1,
+      3
+    ],
+    "xTickStep": 1,
+    "yTickStep": 1,
+    "showGrid": true,
+    "showAxes": true,
+    "snapToGrid": false,
+    "captionText": "3D · 회전체 탭을 열면 속이 빈 원기둥이 나타납니다",
+    "captionFontSize": 16,
+    "captionColor": "#334155",
+    "angleUnit": "rad",
+    "view3d": {
+      "kind": "revolution",
+      "expression": "2",
+      "innerExpression": "1",
+      "lower": 0,
+      "upper": 3,
+      "axis": "x",
+      "radius": 2,
+      "majorRadius": 3
+    }
+  },
+  "objects": [],
+  "selectedObjectId": null
+}

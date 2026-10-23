@@ -1,0 +1,208 @@
+{
+  "version": 1,
+  "scene": {
+    "mode": "2d",
+    "width": 900,
+    "height": 600,
+    "captionHeight": 72,
+    "xRange": [
+      -4.8,
+      4.8
+    ],
+    "yRange": [
+      -2.4,
+      4
+    ],
+    "xTickStep": 1,
+    "yTickStep": 1,
+    "showGrid": true,
+    "showAxes": true,
+    "snapToGrid": false,
+    "captionText": "교점 -2, -1, 1, 2 / A1=22/15, A2=76/15, A3=22/15 / 전체 넓이 8",
+    "captionFontSize": 16,
+    "captionColor": "#334155",
+    "angleUnit": "rad"
+  },
+  "objects": [
+    {
+      "id": "a",
+      "name": "사차함수",
+      "visible": true,
+      "locked": false,
+      "type": "function2d",
+      "expression": "x^4-5*x^2+4",
+      "domain": null,
+      "samples": 1000,
+      "stroke": {
+        "color": {
+          "r": 30,
+          "g": 30,
+          "b": 30,
+          "a": 1
+        },
+        "width": 2,
+        "dashArray": [],
+        "lineStyle": "solid"
+      },
+      "angleUnit": "rad"
+    },
+    {
+      "id": "b",
+      "name": "직선 y=0",
+      "visible": true,
+      "locked": false,
+      "type": "function2d",
+      "expression": "0",
+      "domain": null,
+      "samples": 1000,
+      "stroke": {
+        "color": {
+          "r": 30,
+          "g": 30,
+          "b": 30,
+          "a": 1
+        },
+        "width": 2,
+        "dashArray": [],
+        "lineStyle": "solid"
+      },
+      "angleUnit": "rad"
+    },
+    {
+      "id": "auto-0",
+      "name": "교점 사이 A1",
+      "visible": true,
+      "locked": false,
+      "type": "region2d",
+      "curveAId": "a",
+      "curveBId": "b",
+      "xStart": -2,
+      "xEnd": -1,
+      "samples": 500,
+      "fill": {
+        "enabled": true,
+        "color": {
+          "r": 37,
+          "g": 90,
+          "b": 215,
+          "a": 0.22
+        }
+      },
+      "labelText": "A1",
+      "labelX": -1.5,
+      "labelY": -1.09375,
+      "labelStyle": {
+        "color": {
+          "r": 30,
+          "g": 30,
+          "b": 30,
+          "a": 1
+        },
+        "fontSize": 16,
+        "fontFamily": "Arial"
+      },
+      "regionMode": "between",
+      "showAreaValue": true,
+      "autoBounds": {
+        "index": 0,
+        "searchRange": [
+          -3,
+          3
+        ],
+        "anchorX": -1.5,
+        "anchorY": -1.09375
+      }
+    },
+    {
+      "id": "auto-1",
+      "name": "교점 사이 A2",
+      "visible": true,
+      "locked": false,
+      "type": "region2d",
+      "curveAId": "a",
+      "curveBId": "b",
+      "xStart": -1,
+      "xEnd": 1,
+      "samples": 500,
+      "fill": {
+        "enabled": true,
+        "color": {
+          "r": 245,
+          "g": 158,
+          "b": 11,
+          "a": 0.22
+        }
+      },
+      "labelText": "A2",
+      "labelX": 0,
+      "labelY": 2,
+      "labelStyle": {
+        "color": {
+          "r": 30,
+          "g": 30,
+          "b": 30,
+          "a": 1
+        },
+        "fontSize": 16,
+        "fontFamily": "Arial"
+      },
+      "regionMode": "between",
+      "showAreaValue": true,
+      "autoBounds": {
+        "index": 1,
+        "searchRange": [
+          -3,
+          3
+        ],
+        "anchorX": 0,
+        "anchorY": 2
+      }
+    },
+    {
+      "id": "auto-2",
+      "name": "교점 사이 A3",
+      "visible": true,
+      "locked": false,
+      "type": "region2d",
+      "curveAId": "a",
+      "curveBId": "b",
+      "xStart": 1,
+      "xEnd": 2,
+      "samples": 500,
+      "fill": {
+        "enabled": true,
+        "color": {
+          "r": 139,
+          "g": 92,
+          "b": 246,
+          "a": 0.22
+        }
+      },
+      "labelText": "A3",
+      "labelX": 1.5,
+      "labelY": -1.09375,
+      "labelStyle": {
+        "color": {
+          "r": 30,
+          "g": 30,
+          "b": 30,
+          "a": 1
+        },
+        "fontSize": 16,
+        "fontFamily": "Arial"
+      },
+      "regionMode": "between",
+      "showAreaValue": true,
+      "autoBounds": {
+        "index": 2,
+        "searchRange": [
+          -3,
+          3
+        ],
+        "anchorX": 1.5,
+        "anchorY": -1.09375
+      }
+    }
+  ],
+  "selectedObjectId": null
+}

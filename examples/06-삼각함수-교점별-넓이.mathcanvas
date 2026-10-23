@@ -1,0 +1,253 @@
+{
+  "version": 1,
+  "scene": {
+    "mode": "2d",
+    "width": 900,
+    "height": 600,
+    "captionHeight": 72,
+    "xRange": [
+      -7,
+      7
+    ],
+    "yRange": [
+      -4.6666667,
+      4.6666667
+    ],
+    "xTickStep": 1,
+    "yTickStep": 1,
+    "showGrid": true,
+    "showAxes": true,
+    "snapToGrid": false,
+    "captionText": "라디안 / sin(x)와 x축 / 각 영역 넓이 2, 전체 8 / 첫·마지막 교점 바깥은 제외",
+    "captionFontSize": 16,
+    "captionColor": "#334155",
+    "angleUnit": "rad"
+  },
+  "objects": [
+    {
+      "id": "a",
+      "name": "사인함수",
+      "visible": true,
+      "locked": false,
+      "type": "function2d",
+      "expression": "sin(x)",
+      "domain": null,
+      "samples": 1000,
+      "stroke": {
+        "color": {
+          "r": 30,
+          "g": 30,
+          "b": 30,
+          "a": 1
+        },
+        "width": 2,
+        "dashArray": [],
+        "lineStyle": "solid"
+      },
+      "angleUnit": "rad"
+    },
+    {
+      "id": "b",
+      "name": "직선 y=0",
+      "visible": true,
+      "locked": false,
+      "type": "function2d",
+      "expression": "0",
+      "domain": null,
+      "samples": 1000,
+      "stroke": {
+        "color": {
+          "r": 30,
+          "g": 30,
+          "b": 30,
+          "a": 1
+        },
+        "width": 2,
+        "dashArray": [],
+        "lineStyle": "solid"
+      },
+      "angleUnit": "rad"
+    },
+    {
+      "id": "auto-0",
+      "name": "교점 사이 A1",
+      "visible": true,
+      "locked": false,
+      "type": "region2d",
+      "curveAId": "a",
+      "curveBId": "b",
+      "xStart": -6.283185307179586,
+      "xEnd": -3.141592653589793,
+      "samples": 500,
+      "fill": {
+        "enabled": true,
+        "color": {
+          "r": 37,
+          "g": 90,
+          "b": 215,
+          "a": 0.22
+        }
+      },
+      "labelText": "A1",
+      "labelX": -4.71238898038469,
+      "labelY": 0.5,
+      "labelStyle": {
+        "color": {
+          "r": 30,
+          "g": 30,
+          "b": 30,
+          "a": 1
+        },
+        "fontSize": 16,
+        "fontFamily": "Arial"
+      },
+      "regionMode": "between",
+      "showAreaValue": true,
+      "autoBounds": {
+        "index": 0,
+        "searchRange": [
+          -7,
+          7
+        ],
+        "anchorX": -4.71238898038469,
+        "anchorY": 0.5
+      }
+    },
+    {
+      "id": "auto-1",
+      "name": "교점 사이 A2",
+      "visible": true,
+      "locked": false,
+      "type": "region2d",
+      "curveAId": "a",
+      "curveBId": "b",
+      "xStart": -3.141592653589793,
+      "xEnd": 0,
+      "samples": 500,
+      "fill": {
+        "enabled": true,
+        "color": {
+          "r": 245,
+          "g": 158,
+          "b": 11,
+          "a": 0.22
+        }
+      },
+      "labelText": "A2",
+      "labelX": -1.5707963267948966,
+      "labelY": -0.5,
+      "labelStyle": {
+        "color": {
+          "r": 30,
+          "g": 30,
+          "b": 30,
+          "a": 1
+        },
+        "fontSize": 16,
+        "fontFamily": "Arial"
+      },
+      "regionMode": "between",
+      "showAreaValue": true,
+      "autoBounds": {
+        "index": 1,
+        "searchRange": [
+          -7,
+          7
+        ],
+        "anchorX": -1.5707963267948966,
+        "anchorY": -0.5
+      }
+    },
+    {
+      "id": "auto-2",
+      "name": "교점 사이 A3",
+      "visible": true,
+      "locked": false,
+      "type": "region2d",
+      "curveAId": "a",
+      "curveBId": "b",
+      "xStart": 0,
+      "xEnd": 3.141592653589793,
+      "samples": 500,
+      "fill": {
+        "enabled": true,
+        "color": {
+          "r": 139,
+          "g": 92,
+          "b": 246,
+          "a": 0.22
+        }
+      },
+      "labelText": "A3",
+      "labelX": 1.5707963267948966,
+      "labelY": 0.5,
+      "labelStyle": {
+        "color": {
+          "r": 30,
+          "g": 30,
+          "b": 30,
+          "a": 1
+        },
+        "fontSize": 16,
+        "fontFamily": "Arial"
+      },
+      "regionMode": "between",
+      "showAreaValue": true,
+      "autoBounds": {
+        "index": 2,
+        "searchRange": [
+          -7,
+          7
+        ],
+        "anchorX": 1.5707963267948966,
+        "anchorY": 0.5
+      }
+    },
+    {
+      "id": "auto-3",
+      "name": "교점 사이 A4",
+      "visible": true,
+      "locked": false,
+      "type": "region2d",
+      "curveAId": "a",
+      "curveBId": "b",
+      "xStart": 3.141592653589793,
+      "xEnd": 6.283185307179586,
+      "samples": 500,
+      "fill": {
+        "enabled": true,
+        "color": {
+          "r": 16,
+          "g": 185,
+          "b": 129,
+          "a": 0.22
+        }
+      },
+      "labelText": "A4",
+      "labelX": 4.71238898038469,
+      "labelY": -0.5,
+      "labelStyle": {
+        "color": {
+          "r": 30,
+          "g": 30,
+          "b": 30,
+          "a": 1
+        },
+        "fontSize": 16,
+        "fontFamily": "Arial"
+      },
+      "regionMode": "between",
+      "showAreaValue": true,
+      "autoBounds": {
+        "index": 3,
+        "searchRange": [
+          -7,
+          7
+        ],
+        "anchorX": 4.71238898038469,
+        "anchorY": -0.5
+      }
+    }
+  ],
+  "selectedObjectId": null
+}

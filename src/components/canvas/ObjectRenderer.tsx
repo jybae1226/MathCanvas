@@ -1,21 +1,21 @@
+import { buildRegionGeometry } from "../../utils/calculus";
+import { findCurve } from "../../utils/curves";
+import { lineEndpoints } from "../../utils/geometry";
+import { resolveAutomaticRegion } from "../../utils/boundedAreas";
 import type { PointerEvent as ReactPointerEvent } from "react";
 import katex from "katex";
 import type { LabelPosition, SceneObject } from "../../types/objects";
 import { rgbaToCss } from "../../types/styles";
 import {
   buildFunctionPath,
+  isImplicitExpression,
   buildImplicitPath,
-  buildRegionPath,
   sampleFunctionPoints,
   samplePolarFunctionPoints,
 } from "../../utils/graph";
 
 type DragTarget =
-  | "move"
-  | "line-start"
-  | "line-end"
-  | "circle-radius"
-  | "region-label";
+  "move" | "line-start" | "line-end" | "circle-radius" | "region-label";
 
 type Props = {
   object: SceneObject;
@@ -57,7 +57,7 @@ function getLabelOffset(position: LabelPosition) {
   }
 }
 
-function getStrokeDashArray(object: Extract<SceneObject, { stroke: any }>) {
+function getStrokeDashArray(object: Extract<SceneObject, { stroke: unknown }>) {
   const style = object.stroke.lineStyle ?? "solid";
   if (style === "dashed") return "10 6";
   if (style === "dotted") return "2 6";
@@ -91,27 +91,6 @@ function getDoubleLineSegments(
   ];
 }
 
-function latexToDisplayText(latex: string) {
-  return latex
-    .replace(/\\cdot/g, "·")
-    .replace(/\\times/g, "×")
-    .replace(/\\div/g, "÷")
-    .replace(/\\pi/g, "π")
-    .replace(/\\theta/g, "θ")
-    .replace(/\\alpha/g, "α")
-    .replace(/\\beta/g, "β")
-    .replace(/\\gamma/g, "γ")
-    .replace(/\\Delta/g, "Δ")
-    .replace(/\\sqrt\{([^}]*)\}/g, "√($1)")
-    .replace(/\\int/g, "∫")
-    .replace(/\\sum/g, "∑")
-    .replace(/\\,/g, " ")
-    .replace(/\\left/g, "")
-    .replace(/\\right/g, "")
-    .replace(/[{}]/g, "")
-    .trim();
-}
-
 export function ObjectRenderer({
   object,
   allObjects,
@@ -127,21 +106,23 @@ export function ObjectRenderer({
   if (!object.visible) return null;
 
   if (object.type === "region2d") {
-    const curveA = allObjects.find((obj) => obj.id === object.curveAId);
-    const curveB = allObjects.find((obj) => obj.id === object.curveBId);
+    const curveA = findCurve(allObjects, object.curveAId);
+    const curveB = findCurve(allObjects, object.curveBId);
 
     if (!curveA || !curveB) return null;
+    const region = resolveAutomaticRegion(object, curveA, curveB);
+    if (!region) return null;
 
-    const d = buildRegionPath(
-      curveA,
-      curveB,
-      object.xStart,
-      object.xEnd,
-      object.samples,
-      toScreenX,
-      toScreenY,
-      currentYRange,
-    );
+    const d = region.fill.enabled
+      ? buildRegionGeometry(
+          region,
+          curveA,
+          curveB,
+          currentYRange,
+          toScreenX,
+          toScreenY,
+        )
+      : "";
 
     if (!d) return null;
 
@@ -149,11 +130,11 @@ export function ObjectRenderer({
       <g onClick={() => onSelect(object.id)} style={{ cursor: "pointer" }}>
         <path
           d={d}
-          fill={rgbaToCss(object.fill.color)}
-          stroke={isSelected ? "#ff9800" : "none"}
-          strokeWidth={isSelected ? 2 : 0}
+          fill={rgbaToCss(region.fill.color)}
+          data-region-path="true"
+          stroke="none"
         />
-        {object.labelText && (
+        {region.labelText && (
           <g
             onPointerDown={(e) => {
               e.stopPropagation();
@@ -162,14 +143,18 @@ export function ObjectRenderer({
             style={{ cursor: "move" }}
           >
             <text
-              x={toScreenX(object.labelX)}
-              y={toScreenY(object.labelY)}
+              x={toScreenX(region.labelX)}
+              y={toScreenY(region.labelY)}
               fill={rgbaToCss(object.labelStyle.color)}
               fontSize={object.labelStyle.fontSize}
               fontFamily={object.labelStyle.fontFamily}
               textAnchor="middle"
+              stroke="white"
+              strokeWidth={4}
+              strokeLinejoin="round"
+              paintOrder="stroke fill"
             >
-              {object.labelText}
+              {region.labelText}
             </text>
           </g>
         )}
@@ -208,6 +193,7 @@ export function ObjectRenderer({
         )}
         {isSelected && (
           <circle
+            data-export-ignore="true"
             cx={toScreenX(object.x)}
             cy={toScreenY(object.y)}
             r={object.radius + 5}
@@ -222,10 +208,12 @@ export function ObjectRenderer({
   }
 
   if (object.type === "line2d") {
-    const x1 = toScreenX(object.x1);
-    const y1 = toScreenY(object.y1);
-    const x2 = toScreenX(object.x2);
-    const y2 = toScreenY(object.y2);
+    const endpoints = lineEndpoints(object, currentXRange, currentYRange);
+    if (!endpoints) return null;
+    const x1 = toScreenX(endpoints.x1);
+    const y1 = toScreenY(endpoints.y1);
+    const x2 = toScreenX(endpoints.x2);
+    const y2 = toScreenY(endpoints.y2);
     const strokeColor = rgbaToCss(object.stroke.color);
     const dashArray = getStrokeDashArray(object);
     const isDouble = (object.stroke.lineStyle ?? "solid") === "double";
@@ -235,7 +223,7 @@ export function ObjectRenderer({
       if (!isLast || arrowType === "none") return undefined;
       if (arrowType === "open") return "url(#line-arrow-open)";
       if (arrowType === "closed") return "url(#line-arrow-closed)";
-      if (arrowType === "both") return "url(#line-arrow-both)";
+      if (arrowType === "both") return "url(#line-arrow-open)";
       return undefined;
     };
 
@@ -256,7 +244,15 @@ export function ObjectRenderer({
                 y2={seg.y2}
                 stroke={strokeColor}
                 strokeWidth={object.stroke.width}
-                markerEnd={getMarkerUrl(object.arrowEnd, index === doubleSegments.length - 1)}
+                markerStart={
+                  object.arrowEnd === "both"
+                    ? "url(#line-arrow-start)"
+                    : undefined
+                }
+                markerEnd={getMarkerUrl(
+                  object.arrowEnd,
+                  index === doubleSegments.length - 1,
+                )}
               />
             ))}
           </>
@@ -269,12 +265,15 @@ export function ObjectRenderer({
             stroke={strokeColor}
             strokeWidth={object.stroke.width}
             strokeDasharray={dashArray}
+            markerStart={
+              object.arrowEnd === "both" ? "url(#line-arrow-start)" : undefined
+            }
             markerEnd={getMarkerUrl(object.arrowEnd)}
           />
         )}
 
         {isSelected && (
-          <>
+          <g data-export-ignore="true">
             <line
               x1={x1}
               y1={y1}
@@ -286,8 +285,8 @@ export function ObjectRenderer({
             />
 
             <circle
-              cx={x1}
-              cy={y1}
+              cx={toScreenX(object.x1)}
+              cy={toScreenY(object.y1)}
               r={6}
               fill="#ffffff"
               stroke="#ff9800"
@@ -300,8 +299,8 @@ export function ObjectRenderer({
             />
 
             <circle
-              cx={x2}
-              cy={y2}
+              cx={toScreenX(object.x2)}
+              cy={toScreenY(object.y2)}
               r={6}
               fill="#ffffff"
               stroke="#ff9800"
@@ -312,7 +311,7 @@ export function ObjectRenderer({
               }}
               style={{ cursor: "grab" }}
             />
-          </>
+          </g>
         )}
       </g>
     );
@@ -321,7 +320,8 @@ export function ObjectRenderer({
   if (object.type === "circle2d") {
     const cx = toScreenX(object.cx);
     const cy = toScreenY(object.cy);
-    const rPx = object.radius * Math.abs(toScreenX(1) - toScreenX(0));
+    const rx = object.radius * Math.abs(toScreenX(1) - toScreenX(0));
+    const ry = object.radius * Math.abs(toScreenY(1) - toScreenY(0));
     const handleX = toScreenX(object.cx + object.radius);
     const handleY = toScreenY(object.cy);
 
@@ -331,10 +331,11 @@ export function ObjectRenderer({
         onPointerDown={(e) => onPointerDown(e, object.id, "move")}
         style={{ cursor: "pointer" }}
       >
-        <circle
+        <ellipse
           cx={cx}
           cy={cy}
-          r={rPx}
+          rx={rx}
+          ry={ry}
           stroke={rgbaToCss(object.stroke.color)}
           strokeWidth={object.stroke.width}
           fill={object.fill.enabled ? rgbaToCss(object.fill.color) : "none"}
@@ -343,11 +344,12 @@ export function ObjectRenderer({
           <circle cx={cx} cy={cy} r={3} fill={rgbaToCss(object.stroke.color)} />
         )}
         {isSelected && (
-          <>
-            <circle
+          <g data-export-ignore="true">
+            <ellipse
               cx={cx}
               cy={cy}
-              r={rPx + 5}
+              rx={rx + 5}
+              ry={ry + 5}
               fill="none"
               stroke="#ff9800"
               strokeWidth={1.5}
@@ -366,7 +368,7 @@ export function ObjectRenderer({
               }}
               style={{ cursor: "ew-resize" }}
             />
-          </>
+          </g>
         )}
       </g>
     );
@@ -375,11 +377,15 @@ export function ObjectRenderer({
   if (object.type === "function2d") {
     if (!object.expression.trim()) return null;
 
-    const isPolarExpr = object.expression.includes("=") &&
+    const isPolarExpr =
+      object.expression.includes("=") &&
       object.expression.trim().split("=")[0].trim().replace(/\s+/g, "") === "r";
 
     if (isPolarExpr) {
-      const resolvedDomain: [number, number] = [0, Math.PI * 2];
+      const resolvedDomain: [number, number] = object.domain ?? [
+        0,
+        object.angleUnit === "deg" ? 360 : Math.PI * 2,
+      ];
       let d = "";
 
       try {
@@ -387,6 +393,7 @@ export function ObjectRenderer({
           object.expression,
           resolvedDomain,
           object.samples,
+          object.angleUnit,
         );
         const polarD = buildFunctionPath(
           points,
@@ -409,6 +416,7 @@ export function ObjectRenderer({
           />
           {isSelected && d && (
             <path
+              data-export-ignore="true"
               d={d}
               fill="none"
               stroke="#ff9800"
@@ -420,15 +428,21 @@ export function ObjectRenderer({
       );
     }
 
-    if (object.expression.includes("=")) {
+    if (isImplicitExpression(object.expression)) {
       const d = buildImplicitPath(
         object.expression,
-        currentXRange,
+        object.domain
+          ? [
+              Math.max(currentXRange[0], object.domain[0]),
+              Math.min(currentXRange[1], object.domain[1]),
+            ]
+          : currentXRange,
         currentYRange,
         260,
         260,
         toScreenX,
         toScreenY,
+        object.angleUnit,
       );
 
       return (
@@ -441,6 +455,7 @@ export function ObjectRenderer({
           />
           {isSelected && d && (
             <path
+              data-export-ignore="true"
               d={d}
               fill="none"
               stroke="#ff9800"
@@ -460,6 +475,7 @@ export function ObjectRenderer({
         object.expression,
         resolvedDomain,
         object.samples,
+        object.angleUnit,
       );
 
       d = buildFunctionPath(points, toScreenX, toScreenY, viewHeight);
@@ -478,6 +494,7 @@ export function ObjectRenderer({
         />
         {isSelected && d && (
           <path
+            data-export-ignore="true"
             d={d}
             fill="none"
             stroke="#ff9800"
@@ -510,6 +527,7 @@ export function ObjectRenderer({
 
         {isSelected && (
           <circle
+            data-export-ignore="true"
             cx={toScreenX(object.x)}
             cy={toScreenY(object.y)}
             r={6}
@@ -523,11 +541,14 @@ export function ObjectRenderer({
     );
   }
 
-      if (object.type === "formula2d") {
+  if (object.type === "formula2d") {
     const html = katex.renderToString(object.latex || "", {
       throwOnError: false,
       displayMode: false,
       output: "html",
+      strict: "ignore",
+      maxExpand: 1000,
+      maxSize: 20,
     });
 
     const fontPx = object.textStyle.fontSize;
@@ -543,13 +564,13 @@ export function ObjectRenderer({
         style={{ cursor: "move" }}
       >
         <foreignObject
-        x={anchorX}
-        y={anchorY - fontPx}
-        width={boxWidth}
-        height={boxHeight}
-        overflow="visible"
-        data-export-formula="true"
-        data-formula-id={object.id}
+          x={anchorX}
+          y={anchorY - fontPx}
+          width={boxWidth}
+          height={boxHeight}
+          overflow="visible"
+          data-export-formula="true"
+          data-formula-id={object.id}
         >
           <div
             data-formula-source={object.id}
@@ -561,13 +582,14 @@ export function ObjectRenderer({
               userSelect: "none",
               background: "transparent",
               fontSize: `${fontPx}px`,
-              }}
+            }}
             dangerouslySetInnerHTML={{ __html: html }}
           />
         </foreignObject>
 
         {isSelected && (
           <circle
+            data-export-ignore="true"
             cx={anchorX}
             cy={anchorY}
             r={6}

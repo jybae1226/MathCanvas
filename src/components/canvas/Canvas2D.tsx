@@ -1,32 +1,15 @@
-import { useMemo, useRef } from "react";
+import { useEffect, useMemo, useRef } from "react";
 import { useProjectStore } from "../../store/projectStore";
 import { ObjectRenderer } from "./ObjectRenderer";
+import { makeTicks } from "../../utils/scene";
 import katex from "katex";
 
-function makeTicks(min: number, max: number, step: number): number[] {
-  if (!Number.isFinite(step) || step <= 0) return [];
-
-  const ticks: number[] = [];
-  const start = Math.ceil(min / step) * step;
-
-  for (let value = start; value <= max + 1e-9; value += step) {
-    ticks.push(Number(value.toFixed(10)));
-  }
-
-  return ticks;
-}
-
-function getStepDecimals(step: number): number {
-  const text = step.toString();
-  if (!text.includes(".")) return 0;
-  return text.split(".")[1].length;
-}
-
-function formatTick(value: number, step: number): string {
-  const decimals = Math.min(6, getStepDecimals(step));
-  const rounded = Number(value.toFixed(decimals));
-  return rounded.toString();
-}
+const axisLabels = {
+  x: katex.renderToString("x", { output: "html" }),
+  y: katex.renderToString("y", { output: "html" }),
+};
+const formatTick = (value: number): string =>
+  Number(value.toPrecision(8)).toString();
 
 function clamp(value: number, min: number, max: number): number {
   return Math.min(max, Math.max(min, value));
@@ -56,9 +39,24 @@ export function Canvas2D() {
   const endInteractionHistory = useProjectStore((s) => s.endInteractionHistory);
   const activeTool = useProjectStore((s) => s.activeTool);
   const lineDraftStart = useProjectStore((s) => s.lineDraftStart);
-  const handleCanvasWorldClick = useProjectStore((s) => s.handleCanvasWorldClick);
+  const handleCanvasWorldClick = useProjectStore(
+    (s) => s.handleCanvasWorldClick,
+  );
   const updateSceneDirect = useProjectStore((s) => s.updateSceneDirect);
   const coordinateProbe = useProjectStore((s) => s.coordinateProbe);
+
+  const svgRef = useRef<SVGSVGElement>(null);
+  const zoomTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  useEffect(() => {
+    const svg = svgRef.current;
+    const preventScroll = (event: WheelEvent) => event.preventDefault();
+    svg?.addEventListener("wheel", preventScroll, { passive: false });
+    return () => {
+      svg?.removeEventListener("wheel", preventScroll);
+      if (zoomTimer.current) clearTimeout(zoomTimer.current);
+      endInteractionHistory();
+    };
+  }, [endInteractionHistory]);
 
   const dragRef = useRef<{
     objectId: string | null;
@@ -87,7 +85,6 @@ export function Canvas2D() {
     yTickStep,
     showAxes,
     showGrid,
-    snapToGrid,
   } = scene;
 
   const totalHeight = height + captionHeight;
@@ -106,7 +103,8 @@ export function Canvas2D() {
   const toScreenY = (y: number) =>
     offsetY + usedHeight - (y - yRange[0]) * uniformScale;
 
-  const toWorldXFromSvg = (sx: number) => xRange[0] + (sx - offsetX) / uniformScale;
+  const toWorldXFromSvg = (sx: number) =>
+    xRange[0] + (sx - offsetX) / uniformScale;
 
   const toWorldYFromSvg = (sy: number) =>
     yRange[0] + (usedHeight - (sy - offsetY)) / uniformScale;
@@ -123,33 +121,29 @@ export function Canvas2D() {
     [yRange, yTickStep],
   );
 
-  const verticalGrid = useMemo(() => {
-    return xTicks.map((x) => (
-      <line
-        key={`vx-${x}`}
-        x1={toScreenX(x)}
-        y1={offsetY}
-        x2={toScreenX(x)}
-        y2={offsetY + usedHeight}
-        stroke="#e9e9e9"
-        strokeWidth={1}
-      />
-    ));
-  }, [xTicks, offsetY, usedHeight]);
+  const verticalGrid = xTicks.map((x) => (
+    <line
+      key={`vx-${x}`}
+      x1={toScreenX(x)}
+      y1={offsetY}
+      x2={toScreenX(x)}
+      y2={offsetY + usedHeight}
+      stroke="#e9e9e9"
+      strokeWidth={1}
+    />
+  ));
 
-  const horizontalGrid = useMemo(() => {
-    return yTicks.map((y) => (
-      <line
-        key={`hy-${y}`}
-        x1={offsetX}
-        y1={toScreenY(y)}
-        x2={offsetX + usedWidth}
-        y2={toScreenY(y)}
-        stroke="#e9e9e9"
-        strokeWidth={1}
-      />
-    ));
-  }, [yTicks, offsetX, usedWidth]);
+  const horizontalGrid = yTicks.map((y) => (
+    <line
+      key={`hy-${y}`}
+      x1={offsetX}
+      y1={toScreenY(y)}
+      x2={offsetX + usedWidth}
+      y2={toScreenY(y)}
+      stroke="#e9e9e9"
+      strokeWidth={1}
+    />
+  ));
 
   const axisY = toScreenY(0);
   const axisX = toScreenX(0);
@@ -171,22 +165,22 @@ export function Canvas2D() {
         fill="#555"
         textAnchor="middle"
       >
-        {formatTick(x, xTickStep)}
+        {formatTick(x)}
       </text>
     ));
 
   const yLabels = yTicks
-    .filter((_, index) => index % yLabelEvery === 0)
+    .filter((y, index) => Math.abs(y) > 1e-10 && index % yLabelEvery === 0)
     .map((y) => (
       <text
         key={`yl-${y}`}
         x={yLabelX}
-        y={toScreenY(y) + 4}
+        y={clamp(toScreenY(y) + 4, 14, height - 4)}
         fontSize={12}
         fill="#555"
         textAnchor="end"
       >
-        {formatTick(y, yTickStep)}
+        {formatTick(y)}
       </text>
     ));
 
@@ -194,9 +188,12 @@ export function Canvas2D() {
   const otherObjects = objects.filter((obj) => obj.type !== "region2d");
 
   return (
-    <div className="canvas-wrap">
+    <div className="canvas-wrap" style={{ width, maxWidth: "100%" }}>
       <svg
+        ref={svgRef}
         id="math-diagram-svg"
+        role="img"
+        aria-label="수학 그래프 캔버스"
         xmlns="http://www.w3.org/2000/svg"
         width={width}
         height={totalHeight}
@@ -208,8 +205,8 @@ export function Canvas2D() {
           const isBackground = target.dataset.role === "background";
 
           const rect = e.currentTarget.getBoundingClientRect();
-          const sx = e.clientX - rect.left;
-          const sy = e.clientY - rect.top;
+          const sx = ((e.clientX - rect.left) * width) / rect.width;
+          const sy = ((e.clientY - rect.top) * totalHeight) / rect.height;
 
           if (sy > height) {
             if (isBackground) {
@@ -218,13 +215,10 @@ export function Canvas2D() {
             return;
           }
 
-          let wx = toWorldXFromSvg(sx);
-          let wy = toWorldYFromSvg(sy);
+          const wx = toWorldXFromSvg(sx);
+          const wy = toWorldYFromSvg(sy);
 
-          if (
-            (activeTool === "line" || activeTool === "coordinate") &&
-            isBackground
-          ) {
+          if (activeTool === "line" || activeTool === "coordinate") {
             handleCanvasWorldClick(wx, wy);
             return;
           }
@@ -238,9 +232,12 @@ export function Canvas2D() {
           const isBackground = target.dataset.role === "background";
 
           if (!isBackground) return;
-          if (e.clientY - e.currentTarget.getBoundingClientRect().top > height) return;
+          const rect = e.currentTarget.getBoundingClientRect();
+          if (((e.clientY - rect.top) * totalHeight) / rect.height > height)
+            return;
 
-          if (activeTool === "select") {
+          if (activeTool === "select" && e.button === 0) {
+            e.currentTarget.setPointerCapture(e.pointerId);
             beginInteractionHistory();
             dragRef.current.mode = "pan";
             dragRef.current.objectId = null;
@@ -253,14 +250,18 @@ export function Canvas2D() {
           const mode = dragRef.current.mode;
           if (!mode) return;
 
-          const dxPixels = e.clientX - dragRef.current.lastClientX;
-          const dyPixels = e.clientY - dragRef.current.lastClientY;
+          const rect = e.currentTarget.getBoundingClientRect();
+          const dxPixels =
+            ((e.clientX - dragRef.current.lastClientX) * width) / rect.width;
+          const dyPixels =
+            ((e.clientY - dragRef.current.lastClientY) * totalHeight) /
+            rect.height;
 
           dragRef.current.lastClientX = e.clientX;
           dragRef.current.lastClientY = e.clientY;
 
-          let dx = screenDxToWorld(dxPixels);
-          let dy = screenDyToWorld(dyPixels);
+          const dx = screenDxToWorld(dxPixels);
+          const dy = screenDyToWorld(dyPixels);
 
           if (mode === "pan") {
             updateSceneDirect({
@@ -303,22 +304,25 @@ export function Canvas2D() {
           dragRef.current.meta = undefined;
           endInteractionHistory();
         }}
-        onPointerLeave={() => {
+        onPointerCancel={() => {
           dragRef.current.objectId = null;
           dragRef.current.mode = null;
           dragRef.current.meta = undefined;
+          endInteractionHistory();
         }}
         onWheel={(e) => {
-          e.preventDefault();
-
           const rect = e.currentTarget.getBoundingClientRect();
-          const sx = e.clientX - rect.left;
-          const sy = e.clientY - rect.top;
+          const sx = ((e.clientX - rect.left) * width) / rect.width;
+          const sy = ((e.clientY - rect.top) * totalHeight) / rect.height;
           if (sy > height) return;
 
           const wx = toWorldXFromSvg(sx);
           const wy = toWorldYFromSvg(sy);
 
+          if (e.deltaY === 0) return;
+          beginInteractionHistory();
+          if (zoomTimer.current) clearTimeout(zoomTimer.current);
+          zoomTimer.current = setTimeout(endInteractionHistory, 180);
           const zoomFactor = e.deltaY < 0 ? 0.9 : 1.1;
 
           const nextXMin = wx - (wx - xRange[0]) * zoomFactor;
@@ -333,6 +337,30 @@ export function Canvas2D() {
         }}
       >
         <defs>
+          <marker
+            id="line-arrow-start"
+            markerWidth="10"
+            markerHeight="10"
+            refX="8"
+            refY="5"
+            orient="auto-start-reverse"
+            markerUnits="strokeWidth"
+          >
+            <path
+              d="M 1 1 L 8 5 L 1 9"
+              fill="none"
+              stroke="context-stroke"
+              strokeWidth="1.5"
+            />
+          </marker>
+          <clipPath id="plot-clip">
+            <rect
+              x={offsetX}
+              y={offsetY}
+              width={usedWidth}
+              height={usedHeight}
+            />
+          </clipPath>
           <marker
             id="line-arrow-open"
             markerWidth="10"
@@ -429,8 +457,10 @@ export function Canvas2D() {
 
         {showGrid && (
           <>
-            {verticalGrid}
-            {horizontalGrid}
+            <g pointerEvents="none">
+              {verticalGrid}
+              {horizontalGrid}
+            </g>
           </>
         )}
 
@@ -445,6 +475,7 @@ export function Canvas2D() {
                 stroke="#666"
                 strokeWidth={1.5}
                 markerEnd="url(#axis-arrow-open)"
+                pointerEvents="none"
               />
             )}
 
@@ -457,66 +488,61 @@ export function Canvas2D() {
                 stroke="#666"
                 strokeWidth={1.5}
                 markerEnd="url(#axis-arrow-open)"
+                pointerEvents="none"
               />
             )}
 
-            {axisY >= offsetY && axisY <= offsetY + usedHeight && (
-              <foreignObject
-                x={offsetX + usedWidth - 20}
-                y={axisY - 20}
-                width={24}
-                height={24}
-              >
-                <div
-                  style={{
-                    width: "100%",
-                    height: "100%",
-                    display: "flex",
-                    alignItems: "center",
-                    justifyContent: "center",
-                    fontSize: 14,
-                  }}
-                  dangerouslySetInnerHTML={{
-                    __html: katex.renderToString("x", { throwOnError: false }),
-                  }}
-                />
-              </foreignObject>
-            )}
-
-            {axisX >= offsetX && axisX <= offsetX + usedWidth && axisX !== toScreenX(0) && (
-              <foreignObject
-                x={axisX}
-                y={offsetY + 8}
-                width={24}
-                height={24}
-              >
-                <div
-                  style={{
-                    width: "100%",
-                    height: "100%",
-                    display: "flex",
-                    alignItems: "center",
-                    justifyContent: "center",
-                    fontSize: 14,
-                  }}
-                  dangerouslySetInnerHTML={{
-                    __html: katex.renderToString("y", { throwOnError: false }),
-                  }}
-                />
-              </foreignObject>
-            )}
+            <g pointerEvents="none">
+              {axisY >= offsetY && axisY <= offsetY + usedHeight && (
+                <foreignObject
+                  x={offsetX + usedWidth - 20}
+                  y={clamp(axisY - 27, 0, height - 25)}
+                  width={24}
+                  height={24}
+                >
+                  <div
+                    style={{
+                      display: "inline-block",
+                      fontSize: 15,
+                      color: "#475569",
+                    }}
+                    dangerouslySetInnerHTML={{ __html: axisLabels.x }}
+                  />
+                </foreignObject>
+              )}
+              {axisX >= offsetX && axisX <= offsetX + usedWidth && (
+                <foreignObject
+                  x={clamp(axisX + 8, 0, width - 25)}
+                  y={offsetY + 5}
+                  width={24}
+                  height={24}
+                >
+                  <div
+                    style={{
+                      display: "inline-block",
+                      fontSize: 15,
+                      color: "#475569",
+                    }}
+                    dangerouslySetInnerHTML={{ __html: axisLabels.y }}
+                  />
+                </foreignObject>
+              )}
+            </g>
           </>
         )}
 
         {showAxes && (
           <>
-            {xLabels}
-            {yLabels}
+            <g pointerEvents="none">
+              {xLabels}
+              {yLabels}
+            </g>
           </>
         )}
 
         {lineDraftStart && (
           <circle
+            data-export-ignore="true"
             cx={toScreenX(lineDraftStart.x)}
             cy={toScreenY(lineDraftStart.y)}
             r={5}
@@ -527,7 +553,7 @@ export function Canvas2D() {
         )}
 
         {coordinateProbe && (
-          <g>
+          <g data-export-ignore="true">
             <circle
               cx={toScreenX(coordinateProbe.x)}
               cy={toScreenY(coordinateProbe.y)}
@@ -547,58 +573,63 @@ export function Canvas2D() {
           </g>
         )}
 
-        {regionObjects.map((object) => (
-          <ObjectRenderer
-            key={object.id}
-            object={object}
-            allObjects={objects}
-            isSelected={selectedObjectId === object.id}
-            toScreenX={toScreenX}
-            toScreenY={toScreenY}
-            currentXRange={xRange}
-            currentYRange={yRange}
-            viewHeight={height}
-            onSelect={selectObject}
-            onPointerDown={(e, id, target, meta) => {
-              if (activeTool !== "select") return;
-              e.stopPropagation();
-              beginInteractionHistory();
-              dragRef.current.objectId = id;
-              dragRef.current.mode = target;
-              dragRef.current.lastClientX = e.clientX;
-              dragRef.current.lastClientY = e.clientY;
-              dragRef.current.meta = meta;
-              selectObject(id);
-            }}
-          />
-        ))}
+        <g clipPath="url(#plot-clip)">
+          {regionObjects.map((object) => (
+            <ObjectRenderer
+              key={object.id}
+              object={object}
+              allObjects={objects}
+              isSelected={selectedObjectId === object.id}
+              toScreenX={toScreenX}
+              toScreenY={toScreenY}
+              currentXRange={xRange}
+              currentYRange={yRange}
+              viewHeight={height}
+              onSelect={selectObject}
+              onPointerDown={(e, id, target, meta) => {
+                if (activeTool !== "select" || object.locked || e.button !== 0)
+                  return;
+                svgRef.current?.setPointerCapture(e.pointerId);
+                e.stopPropagation();
+                beginInteractionHistory();
+                dragRef.current.objectId = id;
+                dragRef.current.mode = target;
+                dragRef.current.lastClientX = e.clientX;
+                dragRef.current.lastClientY = e.clientY;
+                dragRef.current.meta = meta;
+                selectObject(id);
+              }}
+            />
+          ))}
 
-        {otherObjects.map((object) => (
-          <ObjectRenderer
-            key={object.id}
-            object={object}
-            allObjects={objects}
-            isSelected={selectedObjectId === object.id}
-            toScreenX={toScreenX}
-            toScreenY={toScreenY}
-            currentXRange={xRange}
-            currentYRange={yRange}
-            viewHeight={height}
-            onSelect={selectObject}
-            onPointerDown={(e, id, target, meta) => {
-              if (activeTool !== "select") return;
-              e.stopPropagation();
-              beginInteractionHistory();
-              dragRef.current.objectId = id;
-              dragRef.current.mode = target;
-              dragRef.current.lastClientX = e.clientX;
-              dragRef.current.lastClientY = e.clientY;
-              dragRef.current.meta = meta;
-              selectObject(id);
-            }}
-          />
-        ))}
-
+          {otherObjects.map((object) => (
+            <ObjectRenderer
+              key={object.id}
+              object={object}
+              allObjects={objects}
+              isSelected={selectedObjectId === object.id}
+              toScreenX={toScreenX}
+              toScreenY={toScreenY}
+              currentXRange={xRange}
+              currentYRange={yRange}
+              viewHeight={height}
+              onSelect={selectObject}
+              onPointerDown={(e, id, target, meta) => {
+                if (activeTool !== "select" || object.locked || e.button !== 0)
+                  return;
+                svgRef.current?.setPointerCapture(e.pointerId);
+                e.stopPropagation();
+                beginInteractionHistory();
+                dragRef.current.objectId = id;
+                dragRef.current.mode = target;
+                dragRef.current.lastClientX = e.clientX;
+                dragRef.current.lastClientY = e.clientY;
+                dragRef.current.meta = meta;
+                selectObject(id);
+              }}
+            />
+          ))}
+        </g>
         <rect
           data-role="background"
           x={0}

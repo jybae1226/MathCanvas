@@ -1,0 +1,130 @@
+{
+  "version": 1,
+  "scene": {
+    "mode": "2d",
+    "width": 900,
+    "height": 600,
+    "captionHeight": 72,
+    "xRange": [
+      -3,
+      6
+    ],
+    "yRange": [
+      -3,
+      3
+    ],
+    "xTickStep": 1,
+    "yTickStep": 1,
+    "showGrid": true,
+    "showAxes": true,
+    "snapToGrid": false,
+    "captionText": "반지름 2, 중심 거리 2인 두 원의 공통 내부",
+    "captionFontSize": 16,
+    "captionColor": "#334155",
+    "angleUnit": "rad"
+  },
+  "objects": [
+    {
+      "id": "a",
+      "name": "원 C₁",
+      "visible": true,
+      "locked": false,
+      "type": "function2d",
+      "expression": "x^2+y^2=4",
+      "domain": null,
+      "samples": 1000,
+      "stroke": {
+        "color": {
+          "r": 30,
+          "g": 30,
+          "b": 30,
+          "a": 1
+        },
+        "width": 2,
+        "dashArray": [],
+        "lineStyle": "solid"
+      },
+      "angleUnit": "rad"
+    },
+    {
+      "id": "b",
+      "name": "원 C₂",
+      "visible": true,
+      "locked": false,
+      "type": "function2d",
+      "expression": "(x-2)^2+y^2=4",
+      "domain": null,
+      "samples": 1000,
+      "stroke": {
+        "color": {
+          "r": 37,
+          "g": 90,
+          "b": 215,
+          "a": 1
+        },
+        "width": 2,
+        "dashArray": [],
+        "lineStyle": "solid"
+      },
+      "angleUnit": "rad"
+    },
+    {
+      "id": "region",
+      "name": "색칠한 영역",
+      "visible": true,
+      "locked": false,
+      "type": "region2d",
+      "curveAId": "a",
+      "curveBId": "b",
+      "xStart": 0,
+      "xEnd": 2,
+      "samples": 500,
+      "fill": {
+        "enabled": true,
+        "color": {
+          "r": 255,
+          "g": 160,
+          "b": 0,
+          "a": 0.25
+        }
+      },
+      "labelText": "",
+      "labelX": 0,
+      "labelY": 0.5,
+      "labelStyle": {
+        "color": {
+          "r": 30,
+          "g": 30,
+          "b": 30,
+          "a": 1
+        },
+        "fontSize": 22,
+        "fontFamily": "Arial"
+      },
+      "regionMode": "overlap",
+      "signA": 1,
+      "signB": 1
+    },
+    {
+      "id": "formula",
+      "name": "넓이 수식",
+      "visible": true,
+      "locked": false,
+      "type": "formula2d",
+      "x": -2.7,
+      "y": 2.5,
+      "latex": "A=\\frac{8\\pi}{3}-2\\sqrt{3}",
+      "textStyle": {
+        "color": {
+          "r": 30,
+          "g": 30,
+          "b": 30,
+          "a": 1
+        },
+        "fontSize": 22,
+        "fontFamily": "Arial"
+      }
+    }
+  ],
+  "selectedObjectId": null
+}

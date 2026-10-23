@@ -1,0 +1,37 @@
+appId: kr.mathcanvas.desktop
+productName: MathCanvas
+directories:
+  output: release
+files:
+  - dist/**/*
+  - electron/**/*
+  - package.json
+asar: true
+npmRebuild: false
+artifactName: MathCanvas-${version}-${os}-${arch}.${ext}
+win:
+  icon: build/icon.png
+  target:
+    - target: nsis
+      arch: [x64]
+    - target: portable
+      arch: [x64]
+  signExecutable: false
+nsis:
+  oneClick: false
+  perMachine: false
+  allowToChangeInstallationDirectory: true
+  artifactName: MathCanvas-${version}-windows-${arch}-setup.${ext}
+portable:
+  artifactName: MathCanvas-${version}-windows-${arch}-portable.${ext}
+mac:
+  icon: build/icon.png
+  category: public.app-category.education
+  target:
+    - target: dmg
+      arch: [arm64, x64]
+    - target: zip
+      arch: [arm64, x64]
+  identity: "-"
+  hardenedRuntime: false
+  notarize: false

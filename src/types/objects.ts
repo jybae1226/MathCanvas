@@ -27,6 +27,7 @@ export type Point2DObject = BaseObject & {
   label?: string;
   showLabel: boolean;
   labelPosition: LabelPosition;
+  intersection?: { curveAId: string; curveBId: string; index: number };
 };
 
 export type Line2DObject = BaseObject & {
@@ -37,6 +38,7 @@ export type Line2DObject = BaseObject & {
   y2: number;
   stroke: StrokeStyle;
   arrowEnd: "none" | "open" | "closed" | "both";
+  lineKind?: "segment" | "line" | "ray";
 };
 
 export type Circle2DObject = BaseObject & {
@@ -55,6 +57,7 @@ export type Function2DObject = BaseObject & {
   domain: [number, number] | null;
   samples: number;
   stroke: StrokeStyle;
+  angleUnit?: "rad" | "deg";
 };
 
 export type Text2DObject = BaseObject & {
@@ -85,6 +88,18 @@ export type Region2DObject = BaseObject & {
   labelX: number;
   labelY: number;
   labelStyle: TextStyle;
+  branchA?: "upper" | "lower";
+  branchB?: "upper" | "lower";
+  regionMode?: "between" | "inside" | "overlap";
+  signA?: 1 | -1;
+  signB?: 1 | -1;
+  autoBounds?: {
+    index: number;
+    searchRange: [number, number];
+    anchorX: number;
+    anchorY: number;
+  };
+  showAreaValue?: boolean;
 };
 
 export type SceneObject =
@@ -111,6 +126,20 @@ export type ProjectScene = {
   captionText: string;
   captionFontSize: number;
   captionColor: string;
+  angleUnit?: "rad" | "deg";
+  view3d?: SpatialSettings;
+  exportBackground?: "white" | "transparent";
+};
+
+export type SpatialSettings = {
+  kind: "revolution" | "surface" | "sphere" | "cone" | "torus";
+  expression: string;
+  lower: number;
+  upper: number;
+  axis: "x" | "y";
+  radius: number;
+  majorRadius: number;
+  innerExpression?: string;
 };
 
 export type ProjectState = {

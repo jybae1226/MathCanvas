@@ -1,0 +1,71 @@
+{
+  "version": 1,
+  "scene": {
+    "mode": "2d",
+    "width": 900,
+    "height": 600,
+    "captionHeight": 72,
+    "xRange": [
+      -3,
+      3
+    ],
+    "yRange": [
+      -2,
+      2
+    ],
+    "xTickStep": 1,
+    "yTickStep": 1,
+    "showGrid": true,
+    "showAxes": true,
+    "snapToGrid": false,
+    "captionText": "극좌표 심장형: 음수 반지름도 올바르게 처리합니다",
+    "captionFontSize": 16,
+    "captionColor": "#334155",
+    "angleUnit": "rad"
+  },
+  "objects": [
+    {
+      "id": "a",
+      "name": "심장형",
+      "visible": true,
+      "locked": false,
+      "type": "function2d",
+      "expression": "r=1+cos(theta)",
+      "domain": null,
+      "samples": 1000,
+      "stroke": {
+        "color": {
+          "r": 37,
+          "g": 90,
+          "b": 215,
+          "a": 1
+        },
+        "width": 2,
+        "dashArray": [],
+        "lineStyle": "solid"
+      },
+      "angleUnit": "rad"
+    },
+    {
+      "id": "formula",
+      "name": "넓이 수식",
+      "visible": true,
+      "locked": false,
+      "type": "formula2d",
+      "x": -2.7,
+      "y": 1.7,
+      "latex": "r=1+\\cos\\theta",
+      "textStyle": {
+        "color": {
+          "r": 30,
+          "g": 30,
+          "b": 30,
+          "a": 1
+        },
+        "fontSize": 22,
+        "fontFamily": "Arial"
+      }
+    }
+  ],
+  "selectedObjectId": null
+}

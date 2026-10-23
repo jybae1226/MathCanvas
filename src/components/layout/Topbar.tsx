@@ -1,240 +1,222 @@
-import { useEffect, useRef } from "react";
-import { toPng } from "html-to-image";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { useProjectStore } from "../../store/projectStore";
+import { saveFile } from "../../utils/files";
+import { exportImage } from "../../utils/exportImage";
+import { MAX_PROJECT_BYTES } from "../../utils/projectFile";
 
-function downloadTextFile(filename: string, content: string, mimeType: string) {
-  const blob = new Blob([content], { type: mimeType });
-  const url = URL.createObjectURL(blob);
-
-  const a = document.createElement("a");
-  a.href = url;
-  a.download = filename;
-  a.click();
-
-  URL.revokeObjectURL(url);
-}
-
-function getCanvasSvgElement(): SVGSVGElement | null {
-  return document.getElementById("math-diagram-svg") as SVGSVGElement | null;
-}
-
-async function buildExportableSvg() {
-  const svgElement = getCanvasSvgElement();
-  if (!svgElement) return null;
-
-  const clone = svgElement.cloneNode(true) as SVGSVGElement;
-  const svgNs = "http://www.w3.org/2000/svg";
-
-  const formulaNodes = clone.querySelectorAll(
-    'foreignObject[data-export-formula="true"]',
+export function Topbar({
+  view,
+  onView,
+  message,
+  notify,
+}: {
+  view: "2d" | "3d";
+  onView: (view: "2d" | "3d") => void;
+  message: string;
+  notify: (message: string) => void;
+}) {
+  const undo = useProjectStore((s) => s.undo),
+    redo = useProjectStore((s) => s.redo);
+  const canUndo = useProjectStore((s) => s.historyPast.length > 0),
+    canRedo = useProjectStore((s) => s.historyFuture.length > 0);
+  const fileRef = useRef<HTMLInputElement>(null);
+  const exportBackground = useProjectStore(
+    (s) => s.scene.exportBackground ?? "white",
   );
-
-  for (const node of Array.from(formulaNodes)) {
-    const formulaId = node.getAttribute("data-formula-id");
-    if (!formulaId) continue;
-
-    const liveForeignObject = document.querySelector(
-      `foreignObject[data-formula-id="${formulaId}"]`,
-    ) as SVGForeignObjectElement | null;
-
-    const liveInner = document.querySelector(
-      `[data-formula-source="${formulaId}"]`,
-    ) as HTMLElement | null;
-
-    if (!liveForeignObject || !liveInner) continue;
-
-    try {
-      const dataUrl = await toPng(liveInner, {
-        cacheBust: true,
-        backgroundColor: "rgba(0,0,0,0)",
-        pixelRatio: 2,
-      });
-
-      const foRect = liveForeignObject.getBoundingClientRect();
-      const innerRect = liveInner.getBoundingClientRect();
-      const svgRect = svgElement.getBoundingClientRect();
-
-      const svgWidth = Number(svgElement.getAttribute("width") ?? svgRect.width);
-      const svgHeight = Number(svgElement.getAttribute("height") ?? svgRect.height);
-
-      const scaleX = svgWidth / svgRect.width;
-      const scaleY = svgHeight / svgRect.height;
-
-      const imageX = (innerRect.left - svgRect.left) * scaleX;
-      const imageY = (innerRect.top - svgRect.top) * scaleY;
-      const imageWidth = innerRect.width * scaleX;
-      const imageHeight = innerRect.height * scaleY;
-
-      const imageNode = document.createElementNS(svgNs, "image");
-      imageNode.setAttribute("x", String(imageX));
-      imageNode.setAttribute("y", String(imageY));
-      imageNode.setAttribute("width", String(imageWidth));
-      imageNode.setAttribute("height", String(imageHeight));
-      imageNode.setAttribute("href", dataUrl);
-
-      node.parentNode?.replaceChild(imageNode, node);
-    } catch (error) {
-      console.error("Formula export image conversion failed:", error);
-    }
-  }
-
-  const serializer = new XMLSerializer();
-  let source = serializer.serializeToString(clone);
-
-  if (!source.includes('xmlns="http://www.w3.org/2000/svg"')) {
-    source = source.replace(
-      "<svg",
-      '<svg xmlns="http://www.w3.org/2000/svg"',
-    );
-  }
-
-  if (!source.includes('xmlns:xlink="http://www.w3.org/1999/xlink"')) {
-    source = source.replace(
-      "<svg",
-      '<svg xmlns:xlink="http://www.w3.org/1999/xlink"',
-    );
-  }
-
-  return { svgElement, source };
-}
-
-async function exportSvg() {
-  const payload = await buildExportableSvg();
-  if (!payload) return;
-
-  downloadTextFile(
-    "math-diagram.svg",
-    payload.source,
-    "image/svg+xml;charset=utf-8",
-  );
-}
-
-async function exportPng() {
-  const payload = await buildExportableSvg();
-  if (!payload) return;
-
-  const { svgElement, source } = payload;
-  const image = new Image();
-
-  image.onload = () => {
-    const width = Number(svgElement.getAttribute("width") ?? 900);
-    const height = Number(svgElement.getAttribute("height") ?? 672);
-
-    const canvas = document.createElement("canvas");
-    const scale = 2;
-
-    canvas.width = width * scale;
-    canvas.height = height * scale;
-
-    const ctx = canvas.getContext("2d");
-    if (!ctx) return;
-
-    ctx.scale(scale, scale);
-    ctx.fillStyle = "#ffffff";
-    ctx.fillRect(0, 0, width, height);
-    ctx.drawImage(image, 0, 0, width, height);
-
-    const pngUrl = canvas.toDataURL("image/png");
-    const a = document.createElement("a");
-    a.href = pngUrl;
-    a.download = "math-diagram.png";
-    a.click();
-  };
-
-  image.onerror = () => {
-    console.error("PNG export failed");
-  };
-
-  image.src = `data:image/svg+xml;charset=utf-8,${encodeURIComponent(source)}`;
-}
-
-export function Topbar() {
-  const exportProjectJson = useProjectStore((s) => s.exportProjectJson);
-  const importProjectJson = useProjectStore((s) => s.importProjectJson);
-  const resetProject = useProjectStore((s) => s.resetProject);
-  const undo = useProjectStore((s) => s.undo);
-  const redo = useProjectStore((s) => s.redo);
-  const deleteSelectedObject = useProjectStore((s) => s.deleteSelectedObject);
-  const cancelDraftTool = useProjectStore((s) => s.cancelDraftTool);
-  const activeTool = useProjectStore((s) => s.activeTool);
-  const historyPastLength = useProjectStore((s) => s.historyPast.length);
-  const historyFutureLength = useProjectStore((s) => s.historyFuture.length);
-
-  const fileInputRef = useRef<HTMLInputElement | null>(null);
-
-  const handleSave = () => {
-    const json = exportProjectJson();
-    downloadTextFile(
-      "math-diagram-project.json",
-      json,
-      "application/json;charset=utf-8",
-    );
-  };
-
-  const handleOpenClick = () => {
-    fileInputRef.current?.click();
-  };
-
-  const handleFileChange = async (
-    event: React.ChangeEvent<HTMLInputElement>,
-  ) => {
-    const file = event.target.files?.[0];
-    if (!file) return;
-
-    const text = await file.text();
-    importProjectJson(text);
-    event.target.value = "";
-  };
-
-  useEffect(() => {
-    const onKeyDown = (event: KeyboardEvent) => {
-      if (event.key === "Delete") {
-        deleteSelectedObject();
+  const [busy, setBusy] = useState(false);
+  const run = useCallback(
+    async (action: () => Promise<unknown>) => {
+      setBusy(true);
+      try {
+        await action();
+      } catch (error) {
+        notify(
+          error instanceof Error
+            ? error.message
+            : "작업을 완료하지 못했습니다.",
+        );
+      } finally {
+        setBusy(false);
       }
-
-      if (event.key === "Escape") {
-        cancelDraftTool();
+    },
+    [notify],
+  );
+  const save = useCallback(
+    () =>
+      run(async () => {
+        if (
+          await saveFile(
+            "project",
+            useProjectStore.getState().exportProjectJson(),
+          )
+        )
+          notify("수업 파일을 저장했습니다.");
+      }),
+    [run, notify],
+  );
+  const open = useCallback(
+    () =>
+      run(async () => {
+        if (!window.mathCanvas) {
+          fileRef.current?.click();
+          return;
+        }
+        const file = await window.mathCanvas.openProject();
+        if (file) {
+          useProjectStore.getState().importProjectJson(file.content);
+          notify("수업 파일을 열었습니다.");
+        }
+      }),
+    [run, notify],
+  );
+  useEffect(() => {
+    const keydown = (event: KeyboardEvent) => {
+      const editing =
+        event.target instanceof HTMLElement &&
+        !!event.target.closest(
+          "input, textarea, select, [contenteditable=true]",
+        );
+      if (event.key === "Escape") useProjectStore.getState().cancelDraftTool();
+      if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === "s") {
+        event.preventDefault();
+        if (editing && event.target instanceof HTMLElement) event.target.blur();
+        void save();
+        return;
+      }
+      if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === "o") {
+        event.preventDefault();
+        void open();
+        return;
+      }
+      if (editing) return;
+      if (event.key === "Delete" || event.key === "Backspace") {
+        event.preventDefault();
+        useProjectStore.getState().deleteSelectedObject();
+      }
+      if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === "z") {
+        event.preventDefault();
+        if (event.shiftKey) redo();
+        else undo();
+      }
+      if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === "y") {
+        event.preventDefault();
+        redo();
       }
     };
-
-    window.addEventListener("keydown", onKeyDown);
-    return () => window.removeEventListener("keydown", onKeyDown);
-  }, [activeTool, cancelDraftTool, deleteSelectedObject]);
-
+    window.addEventListener("keydown", keydown);
+    return () => window.removeEventListener("keydown", keydown);
+  }, [save, open, undo, redo]);
   return (
-    <header
-      style={{
-        height: 56,
-        borderBottom: "1px solid var(--color-border)",
-        display: "flex",
-        alignItems: "center",
-        justifyContent: "space-between",
-        padding: "0 16px",
-        background: "var(--color-white)",
-      }}
-    >
-      <div style={{ fontWeight: 700, fontSize: 18 }}>MathCanvas</div>
-
-      <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
-        <button onClick={resetProject}>New</button>
-        <button onClick={handleOpenClick}>Open</button>
-        <button onClick={handleSave}>Save</button>
-        <button onClick={undo} disabled={historyPastLength === 0}>
-          Undo
-        </button>
-        <button onClick={redo} disabled={historyFutureLength === 0}>
-          Redo
-        </button>
-        <button onClick={() => void exportSvg()}>Export SVG</button>
-        <button onClick={() => void exportPng()}>Export PNG</button>
+    <header className="topbar">
+      <div className="brand">
+        <img src="./favicon.svg" alt="" />
+        <div>
+          MathCanvas<small>수학을 그리는 공간</small>
+        </div>
       </div>
-
+      <nav className="view-switch" aria-label="보기 선택">
+        <button aria-pressed={view === "2d"} onClick={() => onView("2d")}>
+          2D 그래프
+        </button>
+        <button aria-pressed={view === "3d"} onClick={() => onView("3d")}>
+          3D · 회전체
+        </button>
+      </nav>
+      <div className="file-actions">
+        <button
+          onClick={() => {
+            if (
+              (useProjectStore.getState().objects.length ||
+                useProjectStore.getState().scene.view3d) &&
+              !window.confirm(
+                "현재 수업을 비우고 새로 시작할까요? 필요한 내용은 파일로 저장해주세요.",
+              )
+            )
+              return;
+            useProjectStore.getState().resetProject();
+            notify("새 수업을 시작했습니다.");
+          }}
+        >
+          새로
+        </button>
+        <button disabled={busy} onClick={() => void open()}>
+          열기
+        </button>
+        <button className="primary" disabled={busy} onClick={() => void save()}>
+          저장
+        </button>
+        <span className="toolbar-divider" />
+        <button
+          aria-label="실행 취소"
+          title="실행 취소 Ctrl/⌘+Z"
+          disabled={!canUndo}
+          onClick={undo}
+        >
+          ↶
+        </button>
+        <button
+          aria-label="다시 실행"
+          title="다시 실행 Ctrl/⌘+Shift+Z"
+          disabled={!canRedo}
+          onClick={redo}
+        >
+          ↷
+        </button>
+        <select
+          className="export-background"
+          aria-label="내보내기 배경"
+          value={exportBackground}
+          onChange={(e) =>
+            useProjectStore.getState().updateScene({
+              exportBackground: e.target.value as "white" | "transparent",
+            })
+          }
+        >
+          <option value="white">흰 배경</option>
+          <option value="transparent">투명 배경</option>
+        </select>
+        <button
+          disabled={busy}
+          onClick={() =>
+            void run(async () => {
+              if (await exportImage("svg", exportBackground))
+                notify("SVG 그림을 저장했습니다.");
+            })
+          }
+        >
+          SVG
+        </button>
+        <button
+          disabled={busy}
+          onClick={() =>
+            void run(async () => {
+              if (await exportImage("png", exportBackground))
+                notify("PNG 그림을 저장했습니다.");
+            })
+          }
+        >
+          PNG
+        </button>
+      </div>
+      <div className="sr-only" role="status" aria-live="polite">
+        {message}
+      </div>
       <input
-        ref={fileInputRef}
+        ref={fileRef}
         type="file"
-        accept=".json,application/json"
-        style={{ display: "none" }}
-        onChange={handleFileChange}
+        accept=".json,.mathcanvas,application/json"
+        hidden
+        onChange={(e) => {
+          const file = e.target.files?.[0];
+          e.target.value = "";
+          if (file)
+            void run(async () => {
+              if (file.size > MAX_PROJECT_BYTES)
+                throw new Error("파일은 10MB 이하여야 합니다.");
+              useProjectStore.getState().importProjectJson(await file.text());
+              notify("수업 파일을 열었습니다.");
+            });
+        }}
       />
     </header>
   );
